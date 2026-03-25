@@ -318,17 +318,16 @@
       const icon = catIcons[cat] || 'article';
       const title = entry.title || entry.path || entry.id || 'Untitled';
       const preview = entry.preview || entry.excerpt || '';
-      const tags = (entry.tags || []).slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
+      const tags = (entry.tags || []).slice(0, 3).map((t) => `<span class="card-tag">${esc(t)}</span>`).join('');
       const time = relativeTime(entry.updated || entry.created);
 
       return `<div class="knowledge-card" data-path="${esc(entry.path || entry.id || '')}" tabindex="0" role="button">
-        <div class="card-header">
-          <span class="material-symbols-outlined card-cat-icon">${icon}</span>
-          <span class="card-category">${esc(cat)}</span>
-          ${time ? `<span class="card-time">${time}</span>` : ''}
-        </div>
-        <h3 class="card-title">${esc(title)}</h3>
-        ${preview ? `<p class="card-preview">${esc(preview)}</p>` : ''}
+        <span class="card-category" data-cat="${esc(cat)}">
+          <span class="material-symbols-outlined" style="font-size:14px">${icon}</span>
+          ${esc(cat)}
+        </span>
+        ${time ? `<span class="card-date">${time}</span>` : ''}
+        <div class="card-title">${esc(title)}</div>
         ${tags ? `<div class="card-tags">${tags}</div>` : ''}
       </div>`;
     }).join('');
@@ -409,19 +408,18 @@
       const time = relativeTime(r.timestamp || r.date);
       const roleIcon = role === 'user' ? 'person' : role === 'assistant' ? 'smart_toy' : 'chat';
 
-      return `<div class="result-card" data-session-id="${esc(sessionId)}" tabindex="0" role="button">
-        <div class="result-header">
-          <span class="material-symbols-outlined result-role-icon">${roleIcon}</span>
-          <span class="result-role">${esc(role)}</span>
+      return `<div class="result-item" data-session-id="${esc(sessionId)}" tabindex="0" role="button">
+        <div class="result-meta">
+          <span class="role-badge" data-role="${esc(role)}"><span class="material-symbols-outlined" style="font-size:12px">${roleIcon}</span> ${esc(role)}</span>
           ${project ? `<span class="result-project">${esc(project)}</span>` : ''}
-          ${time ? `<span class="result-time">${time}</span>` : ''}
+          ${time ? `<span class="result-date">${time}</span>` : ''}
+          ${score != null ? `<span class="score-container">${formatScore(score)}</span>` : ''}
         </div>
         <div class="result-excerpt">${highlightExcerpt(excerpt, query)}</div>
-        ${score != null ? formatScore(score) : ''}
       </div>`;
     }).join('');
 
-    el.searchResults.querySelectorAll('.result-card').forEach((card) => {
+    el.searchResults.querySelectorAll('.result-item').forEach((card) => {
       card.addEventListener('click', () => openSessionPanel(card.dataset.sessionId));
       card.addEventListener('keydown', (e) => { if (e.key === 'Enter') openSessionPanel(card.dataset.sessionId); });
     });
@@ -469,26 +467,26 @@
 
     el.sessionsEmpty.classList.add('hidden');
     el.sessionsList.innerHTML = list.map((s) => {
-      const id = s.id || s.sessionId || '';
+      const id = s.sessionId || s.id || '';
       const project = s.project || '';
-      const branch = s.branch || s.git_branch || '';
+      const branch = s.branch || s.gitBranch || s.git_branch || '';
       const count = s.messageCount || s.message_count || s.count || 0;
-      const date = s.date || s.created || s.startedAt || '';
+      const date = s.startTime || s.date || s.created || s.startedAt || '';
+      const preview = s.preview || '';
       const time = relativeTime(date);
       const dateStr = date ? new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
       return `<div class="session-card" data-session-id="${esc(id)}" tabindex="0" role="button">
         <div class="session-header">
-          <span class="material-symbols-outlined session-icon">terminal</span>
-          <span class="session-id" title="${esc(id)}">${esc(id.slice(0, 12))}...</span>
-          ${time ? `<span class="session-time">${time}</span>` : ''}
+          <span class="session-project">${esc(project)}</span>
+          <span class="session-date">${dateStr || time || ''}</span>
         </div>
         <div class="session-meta">
-          ${project ? `<span class="session-project"><span class="material-symbols-outlined meta-icon">folder</span>${esc(project)}</span>` : ''}
-          ${branch ? `<span class="session-branch"><span class="material-symbols-outlined meta-icon">alt_route</span>${esc(branch)}</span>` : ''}
-          <span class="session-count"><span class="material-symbols-outlined meta-icon">chat</span>${count} messages</span>
+          ${branch ? `<span class="session-meta-item"><span class="material-symbols-outlined">alt_route</span>${esc(branch)}</span>` : ''}
+          <span class="session-meta-item"><span class="material-symbols-outlined">chat</span>${count} messages</span>
+          <span class="session-meta-item"><span class="material-symbols-outlined">tag</span>${esc(id.slice(0, 8))}</span>
         </div>
-        ${dateStr ? `<div class="session-date">${dateStr}</div>` : ''}
+        ${preview ? `<div class="session-preview">${esc(preview)}</div>` : ''}
       </div>`;
     }).join('');
 

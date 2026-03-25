@@ -1090,6 +1090,23 @@ h1 {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Loading Inline ────────────────────────────────────────────────────── */
+.loading-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.loading-spinner.small {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .side-panel.open {
