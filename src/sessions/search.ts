@@ -62,12 +62,22 @@ interface DocRef {
   sessionDate: string;
 }
 
-function rankedSearch(
-  query: string,
+// ── Global search index cache ───────────────────────────────────────────────
+// Builds once, reuses across searches. Invalidates after 60 seconds.
+
+let cachedIndex: TfIdfIndex | null = null;
+let cachedDocMap: Map<string, DocRef> | null = null;
+let cacheBuiltAt = 0;
+const CACHE_TTL = 60_000; // 60 seconds
+
+function getOrBuildIndex(
   projects: Array<{ name: string; path: string }>,
-  role: string,
-  maxResults: number,
-): SearchResult[] {
+): { index: TfIdfIndex; docMap: Map<string, DocRef> } {
+  const now = Date.now();
+  if (cachedIndex && cachedDocMap && (now - cacheBuiltAt) < CACHE_TTL) {
+    return { index: cachedIndex, docMap: cachedDocMap };
+  }
+
   const index = new TfIdfIndex();
   const docMap = new Map<string, DocRef>();
   let docCounter = 0;
@@ -82,8 +92,6 @@ function rankedSearch(
         const messages = extractMessages(entries);
 
         for (const msg of messages) {
-          if (role !== 'all' && msg.role !== role) continue;
-
           const docId = `doc_${docCounter++}`;
           index.addDocument(docId, msg.content);
           docMap.set(docId, {
@@ -101,25 +109,43 @@ function rankedSearch(
     }
   }
 
-  const ranked = index.search(query, maxResults);
+  cachedIndex = index;
+  cachedDocMap = docMap;
+  cacheBuiltAt = now;
+  return { index, docMap };
+}
 
-  return ranked.map(({ id, score }) => {
+function rankedSearch(
+  query: string,
+  projects: Array<{ name: string; path: string }>,
+  role: string,
+  maxResults: number,
+): SearchResult[] {
+  const { index, docMap } = getOrBuildIndex(projects);
+
+  // Search more than needed, then filter by role
+  const searchLimit = role !== 'all' ? maxResults * 5 : maxResults;
+  const ranked = index.search(query, searchLimit);
+
+  const results: SearchResult[] = [];
+  for (const { id, score } of ranked) {
+    if (results.length >= maxResults) break;
     const doc = docMap.get(id)!;
-    const excerpt = buildExcerpt(doc.content, query);
+    if (role !== 'all' && doc.role !== role) continue;
 
-    return {
+    results.push({
       source: 'session' as const,
       id: doc.sessionId,
       project: doc.project,
       role: doc.role,
       timestamp: doc.timestamp ?? doc.sessionDate,
-      excerpt,
+      excerpt: buildExcerpt(doc.content, query),
       score,
-      metadata: {
-        sessionDate: doc.sessionDate,
-      },
-    };
-  });
+      metadata: { sessionDate: doc.sessionDate },
+    });
+  }
+
+  return results;
 }
 
 // ── Regex-based search (legacy mode) ────────────────────────────────────────
