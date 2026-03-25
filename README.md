@@ -1,93 +1,203 @@
 # agent-cortex
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
+[![MCP Tools](https://img.shields.io/badge/MCP%20tools-10-purple)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-ES%20modules-blue)]()
 
+**Memory and session recall for AI agents.** A single MCP server that combines a git-synced knowledge base with TF-IDF ranked search across Claude Code session transcripts.
 
-## Getting started
+## Features
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- **TF-IDF ranked search** -- results ordered by relevance, not just regex position
+- **Fuzzy matching** -- typo-tolerant search with configurable thresholds
+- **Scoped recall** -- specialized search for errors, plans, configs, tools, files, or decisions
+- **Git-synced knowledge base** -- markdown vault with YAML frontmatter, auto commit and push on writes
+- **Cross-machine persistence** -- knowledge base syncs via git across all machines
+- **Stateless session search** -- no indexing step, no database, reads JSONL files directly
+- **Zero external dependencies** for search -- no Tantivy, no vector DB, no embeddings
+- **10 MCP tools** -- five for knowledge management, five for session search
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Quick Start
 
-## Add your files
+### Install
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+```bash
+git clone https://gitlab.mukit.at/development/agent-cortex.git
+cd agent-cortex
+npm install
+npm run build
+```
+
+### Configure in Claude Code
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "agent-cortex": {
+      "command": "node",
+      "args": ["/path/to/agent-cortex/dist/index.js"]
+    }
+  }
+}
+```
+
+### Usage
+
+Once configured, the 10 `cortex_*` tools are available in any Claude Code session:
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.mukit.at/development/agent-cortex.git
-git branch -M main
-git push -uf origin main
+cortex_list                                         List entries by category or tag
+cortex_write category=projects filename=my-app      Create/update a knowledge entry
+cortex_read path=projects/my-app.md                 Read a knowledge entry
+cortex_search query="database migration"            TF-IDF ranked session search
+cortex_recall scope=errors query="TypeError"        Scoped search for errors
+cortex_summary session_id="abc-123"                 Session summary
 ```
 
-## Integrate with your tools
+## Configuration
 
-- [ ] [Set up project integrations](https://gitlab.mukit.at/development/agent-cortex/-/settings/integrations)
+| Environment variable | Default | Description |
+|---|---|---|
+| `CORTEX_MEMORY_DIR` | `~/claude-memory` | Path to the git-synced knowledge base directory |
+| `CLAUDE_MEMORY_DIR` | `~/claude-memory` | Alias for `CORTEX_MEMORY_DIR` (backwards compat) |
+| `CLAUDE_DIR` | `~/.claude` | Path to the Claude Code data directory |
 
-## Collaborate with your team
+## Tools Reference
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Knowledge Base Tools
 
-## Test and Deploy
+| Tool | Description | Parameters |
+|---|---|---|
+| `cortex_list` | List entries by category and/or tag | `category?` (projects, people, decisions, workflows, notes), `tag?` |
+| `cortex_read` | Read a specific entry | `path` (relative, e.g. `projects/odoo-19.md`) |
+| `cortex_write` | Create or update an entry (auto git sync) | `category`, `filename`, `content` |
+| `cortex_delete` | Delete an entry (auto git sync) | `path` (relative) |
+| `cortex_sync` | Manual git pull + push | _(none)_ |
 
-Use the built-in continuous integration in GitLab.
+### Session Search Tools
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+| Tool | Description | Parameters |
+|---|---|---|
+| `cortex_sessions` | List sessions with metadata | `project?` (substring filter) |
+| `cortex_search` | TF-IDF ranked search across transcripts | `query`, `project?`, `role?` (user/assistant/all), `max_results?`, `ranked?` |
+| `cortex_get` | Retrieve full conversation from a session | `session_id`, `project?`, `include_tools?`, `tail?` |
+| `cortex_summary` | Session summary with topics, tools, files | `session_id`, `project?` |
+| `cortex_recall` | Scoped search across sessions | `scope` (errors/plans/configs/tools/files/decisions/all), `query`, `project?`, `max_results?` |
 
-***
+## Architecture
 
-# Editing this README
+```
+agent-cortex/
+  src/
+    index.ts              Entry point (stdio transport)
+    server.ts             MCP server, tool definitions, request routing
+    types.ts              Config and shared types
+    knowledge/
+      store.ts            Markdown CRUD with frontmatter parsing
+      search.ts           Knowledge base search with TF-IDF
+      git.ts              Git pull/commit/push operations
+    sessions/
+      parser.ts           JSONL session file parsing
+      search.ts           Session transcript search with TF-IDF
+      scopes.ts           Specialized search scope filters
+      summary.ts          Session summaries and listing
+    search/
+      tfidf.ts            TF-IDF scoring engine
+      fuzzy.ts            Levenshtein fuzzy matching
+      types.ts            Shared search result types
+  tests/
+    tfidf.test.ts         TF-IDF engine tests
+    fuzzy.test.ts         Fuzzy matching tests
+    knowledge.test.ts     Knowledge store tests
+    sessions.test.ts      Session parser tests
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## Search Capabilities
 
-## Suggestions for a good README
+### TF-IDF Ranking
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Results are ranked using term frequency-inverse document frequency scoring. Documents containing rare, distinctive terms rank higher than those with common words. The implementation is self-contained -- no external search libraries.
 
-## Name
-Choose a self-explaining name for your project.
+### Fuzzy Matching
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Handles typos and near-matches using Levenshtein edit distance with a sliding window approach. Configurable threshold (default: 0.7, where 1.0 = exact match).
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Search Scopes
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+The `cortex_recall` tool supports predefined scopes:
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+| Scope | Matches |
+|---|---|
+| `errors` | Stack traces, error messages, exceptions, failed commands |
+| `plans` | Implementation plans, architecture, step-by-step approaches |
+| `configs` | Configuration files, env vars, settings changes |
+| `tools` | Tool invocations, CLI commands, build/test runs |
+| `files` | File paths, modifications, directory structures |
+| `decisions` | Design decisions, trade-off discussions, rationale |
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Knowledge Base
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Categories
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+| Category | Purpose |
+|---|---|
+| `projects` | Project context, architecture, tech stack |
+| `people` | Team members, contacts, preferences |
+| `decisions` | Architecture decisions, trade-offs, rationale |
+| `workflows` | Repeatable processes, deployment steps |
+| `notes` | Everything else |
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+### Frontmatter Format
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```markdown
+---
+title: My Application
+tags: [typescript, react, postgres]
+updated: 2026-03-25
+---
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+Architecture notes, deployment info, etc.
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+### Git Sync
+
+- **On read**: pulls latest changes before returning content
+- **On write/delete**: commits and pushes automatically
+- **Manual sync**: `cortex_sync` runs a full pull + push cycle
+- **Conflict resolution**: uses `git pull --rebase`
+
+## Session Search
+
+Claude Code stores session transcripts as JSONL files under `~/.claude/projects/`. Each line is a JSON object with a `type` field (`user`, `assistant`, `tool_use`, `tool_result`) and associated content.
+
+No pre-built index is needed. The search reads files on demand, working immediately with new sessions.
+
+## Development
+
+```bash
+npm run build          # Compile TypeScript
+npm test               # Run tests with vitest
+npm run test:watch     # Watch mode
+npm run lint           # Type-check with tsc --noEmit
+npm run dev            # Watch mode compilation
+```
+
+## Related Projects
+
+| Project | Description |
+|---|---|
+| [agent-comm](https://gitlab.mukit.at/development/agent-comm) | Inter-agent messaging, channels, shared state, real-time dashboard |
+| [agent-tasks](https://gitlab.mukit.at/development/agent-tasks) | Pipeline task management with stages, dependencies, approvals |
+
+Together, the three servers form a complete multi-agent coordination stack:
+
+- **agent-comm** -- agents discover and talk to each other
+- **agent-tasks** -- agents coordinate work through a shared pipeline
+- **agent-cortex** -- agents remember what happened and recall past context
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT
