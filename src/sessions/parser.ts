@@ -5,6 +5,32 @@ import os from 'os';
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
 
+// ── Session Cache ───────────────────────────────────────────────────────────
+// Cache parsed sessions by file path + mtime to avoid re-parsing on every search
+
+interface CachedSession {
+  mtime: number;
+  entries: SessionEntry[];
+}
+
+const sessionCache = new Map<string, CachedSession>();
+
+function getCachedOrParse(filePath: string): SessionEntry[] {
+  try {
+    const stat = fs.statSync(filePath);
+    const mtime = stat.mtimeMs;
+    const cached = sessionCache.get(filePath);
+    if (cached && cached.mtime === mtime) {
+      return cached.entries;
+    }
+    const entries = parseSessionFileRaw(filePath);
+    sessionCache.set(filePath, { mtime, entries });
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
 export interface SessionEntry {
@@ -36,10 +62,10 @@ export interface SessionMeta {
 // ── Parsing ─────────────────────────────────────────────────────────────────
 
 /**
- * Parse a JSONL session file into an array of entries.
+ * Parse a JSONL session file into an array of entries (raw, no cache).
  * Malformed lines are silently skipped.
  */
-export function parseSessionFile(filePath: string): SessionEntry[] {
+function parseSessionFileRaw(filePath: string): SessionEntry[] {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, 'utf-8');
@@ -59,6 +85,14 @@ export function parseSessionFile(filePath: string): SessionEntry[] {
   }
 
   return entries;
+}
+
+/**
+ * Parse a JSONL session file with mtime-based caching.
+ * Re-parses only when the file has been modified since last read.
+ */
+export function parseSessionFile(filePath: string): SessionEntry[] {
+  return getCachedOrParse(filePath);
 }
 
 /**

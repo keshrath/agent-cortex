@@ -80,8 +80,20 @@ export function getSessionSummary(
     const messages = extractMessages(entries);
 
     // Topics: user messages truncated to 300 chars
+    // Filter out tool results, JSON blobs, base64 images, system reminders
+    const isHumanMessage = (text: string): boolean => {
+      const t = text.trimStart();
+      if (t.startsWith('[{') || t.startsWith('{"')) return false;
+      if (t.includes('tool_use_id') || t.includes('tool_result')) return false;
+      if (t.includes('base64') || t.includes('media_type')) return false;
+      if (t.includes('<system-reminder>')) return false;
+      if (t.length < 3) return false;
+      return true;
+    };
+
     const topics = messages
       .filter(m => m.role === 'user')
+      .filter(m => isHumanMessage(m.content))
       .map(m => ({
         timestamp: m.timestamp,
         content:

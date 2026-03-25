@@ -662,15 +662,26 @@
     }
 
     const messages = s.messages || s.conversation || [];
-    if (messages.length) {
+    // Filter out noisy messages (tool JSON, base64, system reminders)
+    const cleanMessages = messages.filter((m) => {
+      const t = (m.content || '').trimStart();
+      if (t.startsWith('[{') || t.startsWith('{"')) return false;
+      if (t.includes('tool_use_id') || t.includes('tool_result')) return false;
+      if (t.includes('base64') || t.includes('media_type')) return false;
+      if (t.includes('<system-reminder>')) return false;
+      if (t.length < 3) return false;
+      return true;
+    });
+
+    if (cleanMessages.length) {
       html += '<div class="chat-messages">';
-      messages.forEach((m) => {
+      cleanMessages.forEach((m) => {
         const role = m.role || 'unknown';
         const text = m.content || m.text || '';
         const isUser = role === 'user';
         const cls = isUser ? 'chat-msg user' : 'chat-msg assistant';
         const roleIcon = isUser ? 'person' : 'smart_toy';
-        const truncated = text.length > 2000 ? text.slice(0, 2000) + '...' : text;
+        const truncated = text.length > 1500 ? text.slice(0, 1500) + '...' : text;
         const time = m.timestamp ? relativeTime(m.timestamp) : '';
 
         html += `<div class="${cls}">
