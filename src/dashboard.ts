@@ -373,6 +373,28 @@ export function startDashboard(port?: number): Promise<http.Server> {
       }
     }, HEARTBEAT_INTERVAL);
 
+    // ── File Watcher (live reload) ──────────────────────────────────────
+    let reloadDebounce: ReturnType<typeof setTimeout> | null = null;
+
+    function broadcastReload(): void {
+      if (reloadDebounce) clearTimeout(reloadDebounce);
+      reloadDebounce = setTimeout(() => {
+        wsBroadcast({ type: 'reload' });
+      }, 200);
+    }
+
+    try {
+      if (fs.existsSync(uiDir)) {
+        fs.watch(uiDir, { recursive: true }, (eventType, filename) => {
+          if (filename && /\.(html|css|js)$/.test(filename)) {
+            broadcastReload();
+          }
+        });
+      }
+    } catch {
+      // file watching not available on this platform — non-fatal
+    }
+
     server.on('close', () => {
       clearInterval(heartbeat);
       wss.close();

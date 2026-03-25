@@ -181,6 +181,26 @@
 
   function handleWsMessage(msg) {
     switch (msg.type) {
+      case 'reload':
+        location.reload();
+        return;
+      case 'state':
+        if (msg.knowledge) {
+          state.knowledge.entries = msg.knowledge;
+          renderKnowledge();
+        }
+        if (msg.sessions) {
+          state.sessions.list = msg.sessions;
+          renderSessions();
+        }
+        if (msg.stats) {
+          state.stats.knowledgeCount = msg.stats.knowledge_entries || 0;
+          state.stats.sessionCount = msg.stats.session_count || 0;
+          if (msg.stats.version) el.version.textContent = 'v' + msg.stats.version;
+          updateStats();
+        }
+        el.loadingOverlay.classList.add('hidden');
+        break;
       case 'knowledge:update':
       case 'knowledge:change':
         loadKnowledge();
