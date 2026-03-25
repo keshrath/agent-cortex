@@ -280,6 +280,9 @@
       el.views[k].hidden = !active;
     });
 
+    // Close side panel on tab switch
+    if (state.panel.open) closePanel();
+
     if (name === 'knowledge' && state.knowledge.entries.length === 0) loadKnowledge();
     if (name === 'sessions' && state.sessions.list.length === 0) loadSessions();
   }
@@ -400,7 +403,7 @@
 
     el.searchEmpty.classList.add('hidden');
     el.searchResults.innerHTML = results.map((r) => {
-      const sessionId = r.sessionId || r.session_id || '';
+      const sessionId = r.id || r.sessionId || r.session_id || '';
       const excerpt = r.excerpt || r.text || r.content || '';
       const role = r.role || '';
       const score = r.score;
@@ -560,27 +563,28 @@
 
     el.recallEmpty.classList.add('hidden');
     el.recallResults.innerHTML = results.map((r) => {
-      const sessionId = r.sessionId || r.session_id || '';
+      const sessionId = r.id || r.sessionId || r.session_id || '';
       const excerpt = r.excerpt || r.text || r.content || '';
       const role = r.role || '';
       const score = r.score;
-      const scope = r.scope || '';
+      const scope = (r.metadata && r.metadata.scope) || '';
+      const project = r.project || '';
       const time = relativeTime(r.timestamp || r.date);
       const roleIcon = role === 'user' ? 'person' : role === 'assistant' ? 'smart_toy' : 'chat';
 
-      return `<div class="result-card" data-session-id="${esc(sessionId)}" tabindex="0" role="button">
-        <div class="result-header">
-          <span class="material-symbols-outlined result-role-icon">${roleIcon}</span>
-          <span class="result-role">${esc(role)}</span>
-          ${scope ? `<span class="result-scope">${esc(scope)}</span>` : ''}
-          ${time ? `<span class="result-time">${time}</span>` : ''}
+      return `<div class="result-item" data-session-id="${esc(sessionId)}" tabindex="0" role="button">
+        <div class="result-meta">
+          <span class="role-badge" data-role="${esc(role)}"><span class="material-symbols-outlined" style="font-size:12px">${roleIcon}</span> ${esc(role)}</span>
+          ${scope ? `<span class="scope-badge" data-scope="${esc(scope)}">${esc(scope)}</span>` : ''}
+          ${project ? `<span class="result-project">${esc(project)}</span>` : ''}
+          ${time ? `<span class="result-date">${time}</span>` : ''}
+          ${score != null ? `<span class="score-container">${formatScore(score)}</span>` : ''}
         </div>
         <div class="result-excerpt">${highlightExcerpt(excerpt, query)}</div>
-        ${score != null ? formatScore(score) : ''}
       </div>`;
     }).join('');
 
-    el.recallResults.querySelectorAll('.result-card').forEach((card) => {
+    el.recallResults.querySelectorAll('.result-item').forEach((card) => {
       card.addEventListener('click', () => openSessionPanel(card.dataset.sessionId));
       card.addEventListener('keydown', (e) => { if (e.key === 'Enter') openSessionPanel(card.dataset.sessionId); });
     });
@@ -611,60 +615,69 @@
     });
   }
 
+  function stripFrontmatter(content) {
+    const match = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+    return match ? match[1].trim() : content;
+  }
+
   function renderKnowledgePanel(data) {
     el.panelTitle.innerHTML = `<span class="material-symbols-outlined panel-icon">article</span>${esc(data.title)}`;
     const meta = data.meta || {};
-    const metaHtml = [];
-    if (meta.category) metaHtml.push(`<span class="panel-meta-item"><strong>Category:</strong> ${esc(meta.category)}</span>`);
-    if (meta.tags && meta.tags.length) metaHtml.push(`<span class="panel-meta-item"><strong>Tags:</strong> ${meta.tags.map((t) => esc(t)).join(', ')}</span>`);
-    if (meta.updated || meta.created) metaHtml.push(`<span class="panel-meta-item"><strong>Updated:</strong> ${relativeTime(meta.updated || meta.created)}</span>`);
+    const entry = meta.entry || meta;
+    const category = entry.category || meta.category || '';
+    const tags = entry.tags || meta.tags || [];
+    const updated = entry.updated || meta.updated || '';
 
-    el.panelBody.innerHTML =
-      (metaHtml.length ? `<div class="panel-meta">${metaHtml.join('')}</div>` : '') +
-      `<div class="panel-markdown">${renderMd(data.content)}</div>`;
+    let metaHtml = '<div class="panel-meta">';
+    if (category) metaHtml += `<span class="card-category" data-cat="${esc(category)}">${esc(category)}</span>`;
+    if (tags.length) metaHtml += tags.map((t) => `<span class="card-tag">${esc(t)}</span>`).join('');
+    if (updated) metaHtml += `<span class="panel-meta-date">${esc(updated)}</span>`;
+    metaHtml += '</div>';
+
+    const body = stripFrontmatter(data.content);
+    el.panelBody.innerHTML = metaHtml + `<div class="prose">${renderMd(body)}</div>`;
   }
 
   function renderSessionPanel(data) {
     const s = data.session || {};
     const summary = data.summary;
     const id = data.sessionId || s.id || '';
+    const meta = s.meta || s;
 
-    el.panelTitle.innerHTML = `<span class="material-symbols-outlined panel-icon">terminal</span>Session ${esc(id.slice(0, 12))}...`;
+    el.panelTitle.innerHTML = `<span class="material-symbols-outlined panel-icon">terminal</span>Session ${esc(id.slice(0, 8))}`;
 
-    const metaParts = [];
-    if (s.project) metaParts.push(`<span class="panel-meta-item"><strong>Project:</strong> ${esc(s.project)}</span>`);
-    if (s.branch || s.git_branch) metaParts.push(`<span class="panel-meta-item"><strong>Branch:</strong> ${esc(s.branch || s.git_branch)}</span>`);
-    if (s.date || s.created || s.startedAt) metaParts.push(`<span class="panel-meta-item"><strong>Date:</strong> ${new Date(s.date || s.created || s.startedAt).toLocaleString()}</span>`);
+    let html = '<div class="panel-meta">';
+    if (meta.cwd) html += `<span class="panel-meta-item"><span class="material-symbols-outlined" style="font-size:14px">folder</span>${esc(meta.cwd)}</span>`;
+    if (meta.branch) html += `<span class="panel-meta-item"><span class="material-symbols-outlined" style="font-size:14px">alt_route</span>${esc(meta.branch)}</span>`;
+    if (meta.startTime && meta.startTime !== 'unknown') html += `<span class="panel-meta-item"><span class="material-symbols-outlined" style="font-size:14px">schedule</span>${new Date(meta.startTime).toLocaleString()}</span>`;
+    if (meta.messageCount) html += `<span class="panel-meta-item"><span class="material-symbols-outlined" style="font-size:14px">chat</span>${meta.messageCount} messages</span>`;
+    html += '</div>';
 
-    let html = metaParts.length ? `<div class="panel-meta">${metaParts.join('')}</div>` : '';
-
-    if (summary) {
-      const sumText = typeof summary === 'string' ? summary : (summary.summary || summary.text || '');
-      if (sumText) {
-        html += `<div class="panel-summary"><h4>Summary</h4><div class="panel-markdown">${renderMd(sumText)}</div></div>`;
-      }
+    if (summary && summary.topics && summary.topics.length) {
+      html += '<div class="panel-section"><h4 class="panel-section-title">Topics</h4><ul class="panel-topics">';
+      summary.topics.slice(0, 8).forEach((t) => {
+        html += `<li>${esc(t.content)}</li>`;
+      });
+      html += '</ul></div>';
     }
 
     const messages = s.messages || s.conversation || [];
     if (messages.length) {
       html += '<div class="chat-messages">';
-      html += messages.map((m) => {
+      messages.forEach((m) => {
         const role = m.role || 'unknown';
         const text = m.content || m.text || '';
         const isUser = role === 'user';
-        const isAssistant = role === 'assistant';
-        const bubbleClass = isUser ? 'chat-bubble user' : isAssistant ? 'chat-bubble assistant' : 'chat-bubble system';
-        const roleIcon = isUser ? 'person' : isAssistant ? 'smart_toy' : 'info';
+        const cls = isUser ? 'chat-msg user' : 'chat-msg assistant';
+        const roleIcon = isUser ? 'person' : 'smart_toy';
         const truncated = text.length > 2000 ? text.slice(0, 2000) + '...' : text;
+        const time = m.timestamp ? relativeTime(m.timestamp) : '';
 
-        return `<div class="${bubbleClass}">
-          <div class="bubble-header">
-            <span class="material-symbols-outlined bubble-icon">${roleIcon}</span>
-            <span class="bubble-role">${esc(role)}</span>
-          </div>
-          <div class="bubble-content">${renderMd(truncated)}</div>
+        html += `<div class="${cls}">
+          <div class="chat-msg-role"><span class="material-symbols-outlined" style="font-size:14px">${roleIcon}</span> ${esc(role)} ${time ? `<span class="chat-msg-time">${time}</span>` : ''}</div>
+          <div>${isUser ? esc(truncated) : renderMd(truncated)}</div>
         </div>`;
-      }).join('');
+      });
       html += '</div>';
     } else {
       html += '<div class="empty-state"><span class="material-symbols-outlined empty-icon">chat_bubble</span><div class="empty-text">No messages available</div></div>';

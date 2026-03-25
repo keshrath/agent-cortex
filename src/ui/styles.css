@@ -1090,6 +1090,67 @@ h1 {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Panel Metadata ────────────────────────────────────────────────────── */
+.panel-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 16px;
+}
+
+.panel-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.panel-meta-date {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.panel-icon {
+  font-size: 18px;
+  color: var(--accent);
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.panel-section {
+  margin-bottom: 16px;
+}
+
+.panel-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.panel-topics {
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.panel-topics li {
+  margin-bottom: 4px;
+}
+
+.panel-visible .side-panel {
+  width: var(--panel-width);
+  min-width: var(--panel-width);
+}
+
 /* ── Loading Inline ────────────────────────────────────────────────────── */
 .loading-inline {
   display: flex;
