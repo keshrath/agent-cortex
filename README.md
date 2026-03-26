@@ -1,203 +1,200 @@
 # agent-cortex
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
-[![MCP Tools](https://img.shields.io/badge/MCP%20tools-10-purple)]()
-[![TypeScript](https://img.shields.io/badge/TypeScript-ES%20modules-blue)]()
+[![Node >= 20](https://img.shields.io/badge/Node-%3E%3D%2020-brightgreen.svg)](https://nodejs.org)
+[![Tests: 15 passing](https://img.shields.io/badge/Tests-15%20passing-brightgreen.svg)]()
+[![MCP Tools: 10](https://img.shields.io/badge/MCP%20Tools-10-blueviolet.svg)]()
 
-**Memory and session recall for AI agents.** A single MCP server that combines a git-synced knowledge base with TF-IDF ranked search across Claude Code session transcripts.
+**Cross-session memory and recall for AI agents** -- git-synced knowledge base meets TF-IDF ranked session search.
+
+<table>
+<tr>
+<td><img src="docs/assets/knowledge-light.png" alt="Knowledge Base (light)" width="480"></td>
+<td><img src="docs/assets/search-light.png" alt="Session Search" width="480"></td>
+</tr>
+<tr>
+<td align="center"><em>Knowledge base with category filtering</em></td>
+<td align="center"><em>TF-IDF ranked session search</em></td>
+</tr>
+</table>
+
+<img src="docs/assets/knowledge-dark.png" alt="Knowledge Base (dark)" width="480">
+
+## Why
+
+Claude Code sessions are ephemeral. When a session ends, everything it learned -- architecture decisions, debugging insights, project context -- is gone. The next session starts from scratch.
+
+**agent-cortex** solves this with two complementary systems:
+
+1. **Knowledge Base** -- a git-synced markdown vault of structured entries (decisions, workflows, project context) that persists across sessions and machines.
+2. **Session Search** -- TF-IDF ranked full-text search across JSONL session transcripts, so agents can recall what happened before.
+
+| Feature | agent-cortex | claude-task-master | MCP Agent Mail | claude-historian |
+|---|---|---|---|---|
+| Git-synced knowledge base | Yes | No | No | No |
+| TF-IDF ranked search | Yes | No | No | TF-IDF |
+| Fuzzy matching | Yes | No | No | Fuzzy |
+| Scoped recall (6 scopes) | Yes | No | No | 11 scopes |
+| Real-time dashboard | Yes | No | No | No |
+| Cross-machine sync | Yes | No | Git audit trail | No |
+| Structured categories | Yes | No | No | No |
 
 ## Features
 
-- **TF-IDF ranked search** -- results ordered by relevance, not just regex position
-- **Fuzzy matching** -- typo-tolerant search with configurable thresholds
-- **Scoped recall** -- specialized search for errors, plans, configs, tools, files, or decisions
+- **TF-IDF ranked search** -- results ordered by relevance with cached index (~40ms warm queries)
 - **Git-synced knowledge base** -- markdown vault with YAML frontmatter, auto commit and push on writes
-- **Cross-machine persistence** -- knowledge base syncs via git across all machines
-- **Stateless session search** -- no indexing step, no database, reads JSONL files directly
-- **Zero external dependencies** for search -- no Tantivy, no vector DB, no embeddings
-- **10 MCP tools** -- five for knowledge management, five for session search
+- **Fuzzy matching** -- typo-tolerant search using Levenshtein distance
+- **6 search scopes** -- errors, plans, configs, tools, files, decisions
+- **Cross-machine persistence** -- knowledge syncs via git, sessions read from local JSONL
+- **Real-time dashboard** -- browse, search, and manage at `localhost:3423`
+- **Stateless session search** -- no indexing step needed, reads JSONL files directly
+- **Zero external search deps** -- no Tantivy, no vector DB, no embeddings
 
 ## Quick Start
-
-### Install
 
 ```bash
 git clone https://gitlab.mukit.at/development/agent-cortex.git
 cd agent-cortex
-npm install
-npm run build
+npm install && npm run build
 ```
 
 ### Configure in Claude Code
 
-Add to `~/.claude/settings.json`:
+```bash
+claude mcp add agent-cortex -s user \
+  -e CORTEX_MEMORY_DIR="$HOME/claude-memory" \
+  -- node /path/to/agent-cortex/dist/index.js
+```
+
+Or add to `settings.json` permissions:
 
 ```json
 {
-  "mcpServers": {
-    "agent-cortex": {
-      "command": "node",
-      "args": ["/path/to/agent-cortex/dist/index.js"]
-    }
+  "permissions": {
+    "allow": ["mcp__agent-cortex__*"]
   }
 }
 ```
 
-### Usage
+Dashboard: **http://localhost:3423** (auto-starts with MCP server)
 
-Once configured, the 10 `cortex_*` tools are available in any Claude Code session:
+## MCP Tools
 
-```
-cortex_list                                         List entries by category or tag
-cortex_write category=projects filename=my-app      Create/update a knowledge entry
-cortex_read path=projects/my-app.md                 Read a knowledge entry
-cortex_search query="database migration"            TF-IDF ranked session search
-cortex_recall scope=errors query="TypeError"        Scoped search for errors
-cortex_summary session_id="abc-123"                 Session summary
-```
-
-## Configuration
-
-| Environment variable | Default | Description |
-|---|---|---|
-| `CORTEX_MEMORY_DIR` | `~/claude-memory` | Path to the git-synced knowledge base directory |
-| `CLAUDE_MEMORY_DIR` | `~/claude-memory` | Alias for `CORTEX_MEMORY_DIR` (backwards compat) |
-| `CLAUDE_DIR` | `~/.claude` | Path to the Claude Code data directory |
-
-## Tools Reference
-
-### Knowledge Base Tools
+### Knowledge Base
 
 | Tool | Description | Parameters |
 |---|---|---|
-| `cortex_list` | List entries by category and/or tag | `category?` (projects, people, decisions, workflows, notes), `tag?` |
-| `cortex_read` | Read a specific entry | `path` (relative, e.g. `projects/odoo-19.md`) |
-| `cortex_write` | Create or update an entry (auto git sync) | `category`, `filename`, `content` |
-| `cortex_delete` | Delete an entry (auto git sync) | `path` (relative) |
-| `cortex_sync` | Manual git pull + push | _(none)_ |
+| `cortex_list` | List entries by category and/or tag | `category?`, `tag?` |
+| `cortex_read` | Read a specific entry | `path` (required) |
+| `cortex_write` | Create/update entry (auto git sync) | `category`, `filename`, `content` (all required) |
+| `cortex_delete` | Delete an entry (auto git sync) | `path` (required) |
+| `cortex_sync` | Manual git pull + push | -- |
 
-### Session Search Tools
+### Session Search
 
 | Tool | Description | Parameters |
 |---|---|---|
-| `cortex_sessions` | List sessions with metadata | `project?` (substring filter) |
-| `cortex_search` | TF-IDF ranked search across transcripts | `query`, `project?`, `role?` (user/assistant/all), `max_results?`, `ranked?` |
-| `cortex_get` | Retrieve full conversation from a session | `session_id`, `project?`, `include_tools?`, `tail?` |
-| `cortex_summary` | Session summary with topics, tools, files | `session_id`, `project?` |
-| `cortex_recall` | Scoped search across sessions | `scope` (errors/plans/configs/tools/files/decisions/all), `query`, `project?`, `max_results?` |
+| `cortex_sessions` | List sessions with metadata | `project?` |
+| `cortex_search` | TF-IDF ranked search across transcripts | `query` (required), `project?`, `role?`, `max_results?`, `ranked?` |
+| `cortex_get` | Retrieve full session conversation | `session_id` (required), `project?`, `include_tools?`, `tail?` |
+| `cortex_summary` | Session summary (topics, tools, files) | `session_id` (required), `project?` |
+| `cortex_recall` | Scoped search across sessions | `scope` (required), `query` (required), `project?`, `max_results?` |
+
+## REST API
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/knowledge` | List knowledge entries |
+| GET | `/api/knowledge/search?q=` | Search knowledge base |
+| GET | `/api/knowledge/:path` | Read a specific entry |
+| GET | `/api/sessions` | List sessions |
+| GET | `/api/sessions/search?q=&role=&ranked=` | Search sessions (TF-IDF) |
+| GET | `/api/sessions/recall?scope=&q=` | Scoped recall |
+| GET | `/api/sessions/:id` | Read a session |
+| GET | `/api/sessions/:id/summary` | Session summary |
+| GET | `/health` | Health check |
 
 ## Architecture
 
-```
-agent-cortex/
-  src/
-    index.ts              Entry point (stdio transport)
-    server.ts             MCP server, tool definitions, request routing
-    types.ts              Config and shared types
-    knowledge/
-      store.ts            Markdown CRUD with frontmatter parsing
-      search.ts           Knowledge base search with TF-IDF
-      git.ts              Git pull/commit/push operations
-    sessions/
-      parser.ts           JSONL session file parsing
-      search.ts           Session transcript search with TF-IDF
-      scopes.ts           Specialized search scope filters
-      summary.ts          Session summaries and listing
-    search/
-      tfidf.ts            TF-IDF scoring engine
-      fuzzy.ts            Levenshtein fuzzy matching
-      types.ts            Shared search result types
-  tests/
-    tfidf.test.ts         TF-IDF engine tests
-    fuzzy.test.ts         Fuzzy matching tests
-    knowledge.test.ts     Knowledge store tests
-    sessions.test.ts      Session parser tests
+```mermaid
+graph LR
+    subgraph Storage
+        KB[(Knowledge Base<br/>~/claude-memory<br/>Git Repository)]
+        SF[(Session Files<br/>~/.claude/projects<br/>JSONL Logs)]
+    end
+
+    subgraph agent-cortex
+        KM[Knowledge Module<br/>store / search / git]
+        SE[Search Engine<br/>TF-IDF + Fuzzy]
+        DS[Dashboard<br/>:3423]
+        MCP[MCP Server<br/>stdio]
+    end
+
+    subgraph Clients
+        CC[Claude Code Sessions]
+        WB[Web Browser]
+    end
+
+    KB <-->|git pull/push| KM
+    SF -->|parse JSONL| SE
+    KM --> MCP
+    SE --> MCP
+    KM --> DS
+    SE --> DS
+    MCP --> CC
+    DS --> WB
 ```
 
 ## Search Capabilities
 
-### TF-IDF Ranking
+**TF-IDF Ranking** -- results scored by term frequency-inverse document frequency. Rare terms boost relevance. Global index cached for 60 seconds.
 
-Results are ranked using term frequency-inverse document frequency scoring. Documents containing rare, distinctive terms rank higher than those with common words. The implementation is self-contained -- no external search libraries.
+**Fuzzy Matching** -- Levenshtein edit distance with sliding window. Configurable threshold (default 0.7).
 
-### Fuzzy Matching
-
-Handles typos and near-matches using Levenshtein edit distance with a sliding window approach. Configurable threshold (default: 0.7, where 1.0 = exact match).
-
-### Search Scopes
-
-The `cortex_recall` tool supports predefined scopes:
+**Scoped Recall** via `cortex_recall`:
 
 | Scope | Matches |
 |---|---|
-| `errors` | Stack traces, error messages, exceptions, failed commands |
-| `plans` | Implementation plans, architecture, step-by-step approaches |
-| `configs` | Configuration files, env vars, settings changes |
-| `tools` | Tool invocations, CLI commands, build/test runs |
-| `files` | File paths, modifications, directory structures |
-| `decisions` | Design decisions, trade-off discussions, rationale |
+| `errors` | Stack traces, exceptions, failed commands |
+| `plans` | Architecture, TODOs, implementation steps |
+| `configs` | Settings, env vars, configuration files |
+| `tools` | MCP tool calls, CLI commands |
+| `files` | File paths, modifications |
+| `decisions` | Trade-offs, rationale, choices |
 
-## Knowledge Base
-
-### Categories
-
-| Category | Purpose |
-|---|---|
-| `projects` | Project context, architecture, tech stack |
-| `people` | Team members, contacts, preferences |
-| `decisions` | Architecture decisions, trade-offs, rationale |
-| `workflows` | Repeatable processes, deployment steps |
-| `notes` | Everything else |
-
-### Frontmatter Format
-
-```markdown
----
-title: My Application
-tags: [typescript, react, postgres]
-updated: 2026-03-25
----
-
-Architecture notes, deployment info, etc.
-```
-
-### Git Sync
-
-- **On read**: pulls latest changes before returning content
-- **On write/delete**: commits and pushes automatically
-- **Manual sync**: `cortex_sync` runs a full pull + push cycle
-- **Conflict resolution**: uses `git pull --rebase`
-
-## Session Search
-
-Claude Code stores session transcripts as JSONL files under `~/.claude/projects/`. Each line is a JSON object with a `type` field (`user`, `assistant`, `tool_use`, `tool_result`) and associated content.
-
-No pre-built index is needed. The search reads files on demand, working immediately with new sessions.
-
-## Development
+## Testing
 
 ```bash
-npm run build          # Compile TypeScript
-npm test               # Run tests with vitest
-npm run test:watch     # Watch mode
-npm run lint           # Type-check with tsc --noEmit
-npm run dev            # Watch mode compilation
+npm test              # Run all 15 tests
+npm run test:watch    # Watch mode
+npm run lint          # Type-check (tsc --noEmit)
 ```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `CORTEX_MEMORY_DIR` | `~/claude-memory` | Path to git-synced knowledge base |
+| `CLAUDE_MEMORY_DIR` | `~/claude-memory` | Alias (backwards compat) |
+| `CLAUDE_DIR` | `~/.claude` | Claude Code data directory |
+| `CORTEX_PORT` | `3423` | Dashboard HTTP port |
+
+## Documentation
+
+- [Setup Guide](docs/SETUP.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Dashboard](docs/DASHBOARD.md)
+- [Changelog](CHANGELOG.md)
 
 ## Related Projects
 
 | Project | Description |
 |---|---|
-| [agent-comm](https://gitlab.mukit.at/development/agent-comm) | Inter-agent messaging, channels, shared state, real-time dashboard |
-| [agent-tasks](https://gitlab.mukit.at/development/agent-tasks) | Pipeline task management with stages, dependencies, approvals |
+| [agent-comm](https://gitlab.mukit.at/development/agent-comm) | Inter-agent messaging, channels, presence |
+| [agent-tasks](https://gitlab.mukit.at/development/agent-tasks) | Pipeline task management with stages and dependencies |
 
-Together, the three servers form a complete multi-agent coordination stack:
-
-- **agent-comm** -- agents discover and talk to each other
-- **agent-tasks** -- agents coordinate work through a shared pipeline
-- **agent-cortex** -- agents remember what happened and recall past context
+Together: **agent-comm** (talk) + **agent-tasks** (coordinate) + **agent-cortex** (remember).
 
 ## License
 
-MIT
+[MIT](LICENSE)
