@@ -8,6 +8,9 @@ import {
   getSessionMeta,
 } from './parser.js';
 import type { SearchResult } from '../search/types.js';
+import { getEmbeddingProvider } from '../embeddings/index.js';
+import { VectorStore } from '../vectorstore/index.js';
+import { getConfig } from '../types.js';
 
 export interface SearchSessionOptions {
   project?: string;
@@ -16,40 +19,184 @@ export interface SearchSessionOptions {
   maxResults?: number;
   /** When true (default), use TF-IDF ranking. When false, use regex matching. */
   ranked?: boolean;
+  /** When true (default when embeddings available), blend semantic similarity with TF-IDF. */
+  semantic?: boolean;
+}
+
+// ── Lazy VectorStore singleton ──────────────────────────────────────────────
+
+let _vectorStore: VectorStore | null = null;
+
+function getVectorStore(): VectorStore {
+  if (!_vectorStore) {
+    _vectorStore = new VectorStore();
+  }
+  return _vectorStore;
 }
 
 /**
  * Search across all session transcripts.
  *
- * Supports two modes:
- * - **ranked** (default): builds a TF-IDF index over all messages, returns
- *   results ordered by relevance score.
+ * Supports three modes:
+ * - **hybrid** (default when embeddings available): blends TF-IDF ranking
+ *   with semantic vector similarity using configurable alpha weighting.
+ * - **ranked** (default fallback): builds a TF-IDF index over all messages,
+ *   returns results ordered by relevance score.
  * - **legacy** (`ranked: false`): regex-based matching, faster for exact
  *   phrases and pattern searches.
  *
  * Returns results with excerpts (100 chars before + 100 chars after match).
  */
-export function searchSessions(
+export async function searchSessions(
   query: string,
   options: SearchSessionOptions = {},
-): SearchResult[] {
+): Promise<SearchResult[]> {
   const {
     project,
     role = 'all',
     caseSensitive = false,
     maxResults = 20,
     ranked = true,
+    semantic = true,
   } = options;
 
   const projects = getProjectDirs().filter(
     p => !project || p.name.toLowerCase().includes(project.toLowerCase()),
   );
 
-  if (ranked) {
-    return rankedSearch(query, projects, role, maxResults);
+  if (!ranked) {
+    return regexSearch(query, projects, role, caseSensitive, maxResults);
   }
 
-  return regexSearch(query, projects, role, caseSensitive, maxResults);
+  const tfidfResults = rankedSearch(query, projects, role, maxResults);
+
+  if (semantic) {
+    try {
+      const config = getConfig();
+      const hybridResults = await hybridSearch(
+        query,
+        tfidfResults,
+        maxResults,
+        config.embeddingAlpha,
+      );
+      return hybridResults;
+    } catch {
+      // Semantic failed silently — fall back to pure TF-IDF
+    }
+  }
+
+  return tfidfResults;
+}
+
+// ── Hybrid search (TF-IDF + semantic) ───────────────────────────────────────
+
+async function hybridSearch(
+  query: string,
+  tfidfResults: SearchResult[],
+  maxResults: number,
+  alpha: number,
+): Promise<SearchResult[]> {
+  const provider = await getEmbeddingProvider();
+  if (!provider) {
+    return tfidfResults;
+  }
+
+  let queryVector: number[];
+  try {
+    queryVector = await provider.embedOne(query);
+  } catch {
+    return tfidfResults;
+  }
+
+  const store = getVectorStore();
+  let vectorResults;
+  try {
+    vectorResults = store.searchBySource(queryVector, 'session', maxResults * 2);
+  } catch {
+    return tfidfResults;
+  }
+
+  if (vectorResults.length === 0) {
+    return tfidfResults;
+  }
+
+  // Build a map of semantic scores keyed by sessionId
+  // Multiple chunks may match for the same session — take the max score
+  const semanticScores = new Map<string, number>();
+  for (const vr of vectorResults) {
+    const existing = semanticScores.get(vr.sourceId) ?? 0;
+    if (vr.score > existing) {
+      semanticScores.set(vr.sourceId, vr.score);
+    }
+  }
+
+  // Normalize TF-IDF scores to 0-1 range
+  const maxTfidf = tfidfResults.length > 0
+    ? Math.max(...tfidfResults.map(r => r.score))
+    : 1;
+  const normFactor = maxTfidf > 0 ? maxTfidf : 1;
+
+  // Merge: start with TF-IDF results, blend in semantic scores
+  const merged = new Map<string, SearchResult>();
+
+  for (const result of tfidfResults) {
+    const key = `${result.id}:${result.timestamp ?? ''}`;
+    const normalizedTfidf = result.score / normFactor;
+    const semanticScore = semanticScores.get(result.id) ?? 0;
+    const blended = alpha * normalizedTfidf + (1 - alpha) * semanticScore;
+
+    // Apply recency decay on top of blended score
+    const ts = result.timestamp ?? (result.metadata?.sessionDate as string | undefined);
+    const decay = ts ? recencyDecay(ts) : 1;
+    const finalScore = blended * decay;
+
+    merged.set(key, {
+      ...result,
+      score: finalScore,
+      metadata: {
+        ...result.metadata,
+        tfidfScore: normalizedTfidf,
+        semanticScore,
+        blendAlpha: alpha,
+      },
+    });
+  }
+
+  for (const vr of vectorResults) {
+    const alreadyPresent = Array.from(merged.values()).some(r => r.id === vr.sourceId);
+    if (!alreadyPresent) {
+      const semanticScore = vr.score;
+      const blended = (1 - alpha) * semanticScore;
+      // Use chunkText metadata for excerpt
+      const excerpt = vr.chunkText.length > 200
+        ? vr.chunkText.slice(0, 200) + '...'
+        : vr.chunkText;
+      const timestamp = (vr.metadata?.timestamp as string | undefined) ?? undefined;
+      const decay = timestamp ? recencyDecay(timestamp) : 0.5;
+      const finalScore = blended * decay;
+
+      const key = `${vr.sourceId}:${timestamp ?? ''}`;
+      if (!merged.has(key)) {
+        merged.set(key, {
+          source: 'session',
+          id: vr.sourceId,
+          role: (vr.metadata?.role as string | undefined) ?? 'unknown',
+          timestamp,
+          excerpt,
+          score: finalScore,
+          metadata: {
+            tfidfScore: 0,
+            semanticScore,
+            blendAlpha: alpha,
+          },
+        });
+      }
+    }
+  }
+
+  const results = Array.from(merged.values());
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, maxResults);
 }
 
 // ── TF-IDF ranked search ────────────────────────────────────────────────────

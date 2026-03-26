@@ -53,22 +53,22 @@ describe('searchSessions', () => {
 
   // ── Ranked (TF-IDF) mode ─────────────────────────────────────────────────
 
-  it('returns ranked results by TF-IDF relevance', () => {
-    const results = searchSessions('TypeScript');
+  it('returns ranked results by TF-IDF relevance', async () => {
+    const results = await searchSessions('TypeScript', { semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results[0].score).toBeGreaterThan(0);
   });
 
-  it('ranks results with most relevant first', () => {
-    const results = searchSessions('TypeScript');
+  it('ranks results with most relevant first', async () => {
+    const results = await searchSessions('TypeScript', { semantic: false });
     // Results about TypeScript should come first
     for (let i = 1; i < results.length; i++) {
       expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score);
     }
   });
 
-  it('includes source, id, project, excerpt, and score fields', () => {
-    const results = searchSessions('TypeScript');
+  it('includes source, id, project, excerpt, and score fields', async () => {
+    const results = await searchSessions('TypeScript', { semantic: false });
     expect(results.length).toBeGreaterThan(0);
     const r = results[0];
     expect(r.source).toBe('session');
@@ -78,73 +78,86 @@ describe('searchSessions', () => {
     expect(typeof r.score).toBe('number');
   });
 
-  it('filters by role (user only)', () => {
-    const results = searchSessions('TypeScript', { role: 'user' });
+  it('filters by role (user only)', async () => {
+    const results = await searchSessions('TypeScript', { role: 'user', semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results.every(r => r.role === 'user')).toBe(true);
   });
 
-  it('filters by role (assistant only)', () => {
-    const results = searchSessions('TypeScript', { role: 'assistant' });
+  it('filters by role (assistant only)', async () => {
+    const results = await searchSessions('TypeScript', { role: 'assistant', semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results.every(r => r.role === 'assistant')).toBe(true);
   });
 
-  it('returns all roles by default', () => {
-    const results = searchSessions('TypeScript');
+  it('returns all roles by default', async () => {
+    const results = await searchSessions('TypeScript', { semantic: false });
     const roles = new Set(results.map(r => r.role));
     expect(roles.size).toBeGreaterThanOrEqual(1);
   });
 
-  it('respects maxResults limit', () => {
-    const results = searchSessions('TypeScript', { maxResults: 1 });
+  it('respects maxResults limit', async () => {
+    const results = await searchSessions('TypeScript', { maxResults: 1, semantic: false });
     expect(results.length).toBeLessThanOrEqual(1);
   });
 
-  it('returns empty for query with only stopwords', () => {
-    const results = searchSessions('the and or but');
+  it('returns empty for query with only stopwords', async () => {
+    const results = await searchSessions('the and or but', { semantic: false });
     expect(results).toEqual([]);
   });
 
-  it('filters by project name', () => {
-    const results = searchSessions('TypeScript', { project: 'my-project' });
+  it('filters by project name', async () => {
+    const results = await searchSessions('TypeScript', { project: 'my-project', semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results.every(r => r.project === 'my-project')).toBe(true);
   });
 
-  it('returns fewer or no results when project filter excludes matches', () => {
-    const matched = searchSessions('TypeScript', { project: 'my-project' });
-    const filtered = searchSessions('TypeScript', { project: 'xyznonexist999zzz' });
+  it('returns fewer or no results when project filter excludes matches', async () => {
+    const matched = await searchSessions('TypeScript', { project: 'my-project', semantic: false });
+    const filtered = await searchSessions('TypeScript', { project: 'xyznonexist999zzz', semantic: false });
     expect(filtered.length).toBeLessThanOrEqual(matched.length);
   });
 
   // ── Regex mode ───────────────────────────────────────────────────────────
 
-  it('supports regex mode with ranked=false', () => {
-    const results = searchSessions('TypeScript', { ranked: false });
+  it('supports regex mode with ranked=false', async () => {
+    const results = await searchSessions('TypeScript', { ranked: false, semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results.every(r => r.score === 1)).toBe(true); // regex mode uses score=1
   });
 
-  it('regex mode handles special characters gracefully', () => {
-    const results = searchSessions('test[invalid(regex', { ranked: false });
+  it('regex mode handles special characters gracefully', async () => {
+    const results = await searchSessions('test[invalid(regex', { ranked: false, semantic: false });
     expect(Array.isArray(results)).toBe(true);
   });
 
-  it('regex mode respects role filter', () => {
-    const results = searchSessions('TypeScript', { ranked: false, role: 'user' });
+  it('regex mode respects role filter', async () => {
+    const results = await searchSessions('TypeScript', { ranked: false, role: 'user', semantic: false });
     expect(results.every(r => r.role === 'user')).toBe(true);
   });
 
-  it('regex mode respects maxResults', () => {
-    const results = searchSessions('TypeScript', { ranked: false, maxResults: 1 });
+  it('regex mode respects maxResults', async () => {
+    const results = await searchSessions('TypeScript', { ranked: false, maxResults: 1, semantic: false });
     expect(results.length).toBeLessThanOrEqual(1);
   });
 
-  it('regex mode includes excerpts', () => {
-    const results = searchSessions('TypeScript', { ranked: false });
+  it('regex mode includes excerpts', async () => {
+    const results = await searchSessions('TypeScript', { ranked: false, semantic: false });
     if (results.length > 0) {
       expect(results[0].excerpt.length).toBeGreaterThan(0);
     }
+  });
+
+  // ── Semantic fallback ──────────────────────────────────────────────────
+
+  it('semantic: true falls back gracefully when no embeddings available', async () => {
+    const results = await searchSessions('TypeScript', { semantic: true });
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].score).toBeGreaterThan(0);
+  });
+
+  it('default behavior does not crash when no vector store exists', async () => {
+    const results = await searchSessions('TypeScript');
+    expect(Array.isArray(results)).toBe(true);
   });
 });

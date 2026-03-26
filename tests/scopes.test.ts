@@ -63,72 +63,80 @@ describe('scopedSearch', () => {
     cleanup(tmpDir);
   });
 
-  it('filters errors scope correctly', () => {
-    const results = scopedSearch('errors', 'null reference');
+  it('filters errors scope correctly', async () => {
+    const results = await scopedSearch('errors', 'null reference', { semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
     // Should include error-related messages
     const allExcerpts = results.map(r => r.excerpt).join(' ');
     expect(allExcerpts.toLowerCase()).toMatch(/error|typeerror|null/i);
   });
 
-  it('filters plans scope correctly', () => {
-    const results = scopedSearch('plans', 'roadmap');
+  it('filters plans scope correctly', async () => {
+    const results = await scopedSearch('plans', 'roadmap', { semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('filters configs scope correctly', () => {
-    const results = scopedSearch('configs', 'tsconfig');
+  it('filters configs scope correctly', async () => {
+    const results = await scopedSearch('configs', 'tsconfig', { semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('filters tools scope (tool_use and tool_result)', () => {
-    const results = scopedSearch('tools', 'Read');
+  it('filters tools scope (tool_use and tool_result)', async () => {
+    const results = await scopedSearch('tools', 'Read', { semantic: false });
     // tools scope filters by role, so results come from tool_use/tool_result entries
     expect(Array.isArray(results)).toBe(true);
   });
 
-  it('filters files scope correctly', () => {
-    const results = scopedSearch('files', 'server');
+  it('filters files scope correctly', async () => {
+    const results = await scopedSearch('files', 'server', { semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('filters decisions scope correctly', () => {
-    const results = scopedSearch('decisions', 'PostgreSQL');
+  it('filters decisions scope correctly', async () => {
+    const results = await scopedSearch('decisions', 'PostgreSQL', { semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('all scope returns results from all messages', () => {
-    const results = scopedSearch('all', 'null');
+  it('all scope returns results from all messages', async () => {
+    const results = await scopedSearch('all', 'null', { semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('returns empty results when query has no matches', () => {
-    const results = scopedSearch('errors', 'xyznonexistent');
+  it('returns empty results when query has no matches', async () => {
+    const results = await scopedSearch('errors', 'xyznonexistent', { semantic: false });
     expect(results).toEqual([]);
   });
 
-  it('respects maxResults option', () => {
-    const results = scopedSearch('all', 'the', { maxResults: 1 });
+  it('respects maxResults option', async () => {
+    const results = await scopedSearch('all', 'the', { maxResults: 1, semantic: false });
     expect(results.length).toBeLessThanOrEqual(1);
   });
 
-  it('filters by project', () => {
-    const results = scopedSearch('all', 'null', { project: 'test-project' });
+  it('filters by project', async () => {
+    const results = await scopedSearch('all', 'null', { project: 'test-project', semantic: false });
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results.every(r => r.project === 'test-project')).toBe(true);
   });
 
-  it('returns fewer or no results when project filter excludes matches', () => {
-    const broad = scopedSearch('all', 'null', { project: 'test-project' });
-    const narrow = scopedSearch('all', 'null', { project: 'xyznonexist999zzz' });
+  it('returns fewer or no results when project filter excludes matches', async () => {
+    const broad = await scopedSearch('all', 'null', { project: 'test-project', semantic: false });
+    const narrow = await scopedSearch('all', 'null', { project: 'xyznonexist999zzz', semantic: false });
     expect(narrow.length).toBeLessThanOrEqual(broad.length);
   });
 
-  it('includes metadata with scope info', () => {
-    const results = scopedSearch('errors', 'TypeError');
+  it('includes metadata with scope info', async () => {
+    const results = await scopedSearch('errors', 'TypeError', { semantic: false });
     if (results.length > 0) {
       expect(results[0].metadata).toBeDefined();
       expect(results[0].metadata!.scope).toBe('errors');
+    }
+  });
+
+  it('semantic: true falls back gracefully when no embeddings available', async () => {
+    const results = await scopedSearch('all', 'TypeError', { semantic: true });
+    expect(Array.isArray(results)).toBe(true);
+    if (results.length > 0) {
+      expect(results[0].score).toBeGreaterThan(0);
     }
   });
 });
