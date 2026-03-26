@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TfIdfIndex } from '../src/search/tfidf.js';
+import { TfIdfIndex, recencyDecay } from '../src/search/tfidf.js';
 
 describe('TfIdfIndex', () => {
   let index: TfIdfIndex;
@@ -70,5 +70,51 @@ describe('TfIdfIndex', () => {
     }
     const results = index.search('common term', 5);
     expect(results.length).toBe(5);
+  });
+});
+
+describe('recencyDecay', () => {
+  it('returns 1.0 for timestamps from right now', () => {
+    const now = new Date().toISOString();
+    expect(recencyDecay(now)).toBeCloseTo(1.0, 1);
+  });
+
+  it('returns ~0.5 for timestamps exactly one half-life ago', () => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    expect(recencyDecay(thirtyDaysAgo, 30)).toBeCloseTo(0.5, 1);
+  });
+
+  it('returns ~0.25 for timestamps two half-lives ago', () => {
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    expect(recencyDecay(sixtyDaysAgo, 30)).toBeCloseTo(0.25, 1);
+  });
+
+  it('floors at 0.1 for very old timestamps', () => {
+    const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    expect(recencyDecay(yearAgo, 30)).toBe(0.1);
+  });
+
+  it('returns 0.5 for null timestamps', () => {
+    expect(recencyDecay(null)).toBe(0.5);
+  });
+
+  it('returns 1.0 for future timestamps', () => {
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    expect(recencyDecay(future)).toBe(1.0);
+  });
+
+  it('respects custom half-life', () => {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    expect(recencyDecay(sevenDaysAgo, 7)).toBeCloseTo(0.5, 1);
+  });
+
+  it('decay is monotonically decreasing with age', () => {
+    const d1 = recencyDecay(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString());
+    const d7 = recencyDecay(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+    const d30 = recencyDecay(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    const d90 = recencyDecay(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString());
+    expect(d1).toBeGreaterThan(d7);
+    expect(d7).toBeGreaterThan(d30);
+    expect(d30).toBeGreaterThan(d90);
   });
 });
