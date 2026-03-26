@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.local
+coverage/
+*.tgz
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.worktrees/
+.claude/worktrees/
