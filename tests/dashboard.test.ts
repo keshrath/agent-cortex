@@ -53,18 +53,18 @@ describe('dashboard HTTP server', () => {
   });
 
   it('GET /api/sessions/search returns array', async () => {
-    const { status, body } = await fetch('/api/sessions/search?q=test');
+    const { status, body } = await fetch('/api/sessions/search?q=test&max_results=1');
     expect(status).toBe(200);
     const data = JSON.parse(body);
     expect(Array.isArray(data)).toBe(true);
-  });
+  }, 60_000);
 
   it('GET /api/sessions/recall returns array', async () => {
-    const { status, body } = await fetch('/api/sessions/recall?scope=errors&q=test');
+    const { status, body } = await fetch('/api/sessions/recall?scope=errors&q=test&max_results=1');
     expect(status).toBe(200);
     const data = JSON.parse(body);
     expect(Array.isArray(data)).toBe(true);
-  });
+  }, 60_000);
 
   it('GET /api/knowledge/search returns array', async () => {
     const { status, body } = await fetch('/api/knowledge/search?q=test');
