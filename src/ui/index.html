@@ -91,17 +91,6 @@
         Sessions
       </button>
       <button
-        id="tab-recall"
-        class="tab"
-        role="tab"
-        aria-selected="false"
-        aria-controls="view-recall"
-        data-view="recall"
-      >
-        <span class="material-symbols-outlined tab-icon">psychology</span>
-        Recall
-      </button>
-      <button
         id="tab-embeddings"
         class="tab"
         role="tab"
@@ -218,6 +207,27 @@
                 <span class="material-symbols-outlined">code</span>Regex
               </button>
             </div>
+            <div class="filter-chips" id="search-scopes" role="group" aria-label="Filter by scope">
+              <button class="chip active" data-scope="all">All</button>
+              <button class="chip" data-scope="errors">
+                <span class="material-symbols-outlined chip-icon">error</span>Errors
+              </button>
+              <button class="chip" data-scope="plans">
+                <span class="material-symbols-outlined chip-icon">checklist</span>Plans
+              </button>
+              <button class="chip" data-scope="configs">
+                <span class="material-symbols-outlined chip-icon">settings</span>Configs
+              </button>
+              <button class="chip" data-scope="tools">
+                <span class="material-symbols-outlined chip-icon">build</span>Tools
+              </button>
+              <button class="chip" data-scope="files">
+                <span class="material-symbols-outlined chip-icon">description</span>Files
+              </button>
+              <button class="chip" data-scope="decisions">
+                <span class="material-symbols-outlined chip-icon">gavel</span>Decisions
+              </button>
+            </div>
           </div>
           <div id="search-results" class="results-list"></div>
           <div id="search-empty" class="empty-state">
@@ -252,60 +262,6 @@
             <span class="material-symbols-outlined empty-icon">event_busy</span>
             <div class="empty-text">No sessions found</div>
             <div class="empty-hint">Sessions will appear here once indexed</div>
-          </div>
-        </section>
-
-        <!-- ===== Recall Tab ===== -->
-        <section id="view-recall" class="view" role="tabpanel" aria-labelledby="tab-recall" hidden>
-          <div class="view-header">
-            <h2><span class="material-symbols-outlined view-icon">psychology</span>Recall</h2>
-          </div>
-          <div class="filter-chips" id="recall-scopes" role="group" aria-label="Filter by scope">
-            <button class="chip active" data-scope="all">
-              <span class="material-symbols-outlined chip-icon">select_all</span>All
-            </button>
-            <button class="chip" data-scope="errors">
-              <span class="material-symbols-outlined chip-icon">error</span>Errors
-            </button>
-            <button class="chip" data-scope="plans">
-              <span class="material-symbols-outlined chip-icon">checklist</span>Plans
-            </button>
-            <button class="chip" data-scope="configs">
-              <span class="material-symbols-outlined chip-icon">settings</span>Configs
-            </button>
-            <button class="chip" data-scope="tools">
-              <span class="material-symbols-outlined chip-icon">build</span>Tools
-            </button>
-            <button class="chip" data-scope="files">
-              <span class="material-symbols-outlined chip-icon">description</span>Files
-            </button>
-            <button class="chip" data-scope="decisions">
-              <span class="material-symbols-outlined chip-icon">gavel</span>Decisions
-            </button>
-          </div>
-          <div class="search-bar">
-            <span class="material-symbols-outlined search-input-icon">psychology</span>
-            <input
-              type="search"
-              id="recall-input"
-              class="search-input"
-              placeholder="Query recall..."
-              autocomplete="off"
-              aria-label="Query recall"
-            />
-          </div>
-          <label class="semantic-toggle" title="Enable semantic similarity search">
-            <input type="checkbox" id="recall-semantic" checked />
-            <span class="material-symbols-outlined toggle-icon">neurology</span>
-            Semantic
-          </label>
-          <div id="recall-results" class="results-list"></div>
-          <div id="recall-empty" class="empty-state">
-            <span class="material-symbols-outlined empty-icon">psychology</span>
-            <div class="empty-text">Scoped recall across sessions</div>
-            <div class="empty-hint">
-              Select a scope and enter a query to recall relevant information
-            </div>
           </div>
         </section>
 

@@ -6,9 +6,16 @@
   const state = {
     activeTab: 'knowledge',
     knowledge: { entries: [], activeCategory: 'all' },
-    search: { query: '', results: [], role: 'all', ranked: true, semantic: false, loading: false },
+    search: {
+      query: '',
+      results: [],
+      role: 'all',
+      scope: 'all',
+      ranked: true,
+      semantic: false,
+      loading: false,
+    },
     sessions: { list: [], projectFilter: '', loading: false },
-    recall: { scope: 'all', query: '', results: [], loading: false, semantic: true },
     embeddings: { stats: null, loading: false },
     panel: { open: false, type: null, data: null },
     stats: { knowledgeCount: 0, sessionCount: 0 },
@@ -22,14 +29,12 @@
       knowledge: $('tab-knowledge'),
       search: $('tab-search'),
       sessions: $('tab-sessions'),
-      recall: $('tab-recall'),
       embeddings: $('tab-embeddings'),
     },
     views: {
       knowledge: $('view-knowledge'),
       search: $('view-search'),
       sessions: $('view-sessions'),
-      recall: $('view-recall'),
       embeddings: $('view-embeddings'),
     },
     knowledgeGrid: $('knowledge-grid'),
@@ -45,11 +50,7 @@
     sessionsList: $('sessions-list'),
     sessionsEmpty: $('sessions-empty'),
     sessionProjectFilter: $('session-project-filter'),
-    recallInput: $('recall-input'),
-    recallResults: $('recall-results'),
-    recallEmpty: $('recall-empty'),
-    recallSemantic: $('recall-semantic'),
-    recallScopes: $('recall-scopes'),
+    searchScopes: $('search-scopes'),
     sidePanel: $('side-panel'),
     panelTitle: $('panel-title'),
     panelBody: $('panel-body'),
@@ -436,10 +437,18 @@
     renderSearchResults();
     try {
       const params = new URLSearchParams({ q });
-      if (state.search.role !== 'all') params.set('role', state.search.role);
-      params.set('ranked', state.search.ranked);
-      params.set('semantic', state.search.semantic);
-      const data = await api(`/sessions/search?${params}`);
+      let endpoint;
+      if (state.search.scope !== 'all') {
+        params.set('scope', state.search.scope);
+        params.set('semantic', state.search.semantic);
+        endpoint = `/sessions/recall?${params}`;
+      } else {
+        if (state.search.role !== 'all') params.set('role', state.search.role);
+        params.set('ranked', state.search.ranked);
+        params.set('semantic', state.search.semantic);
+        endpoint = `/sessions/search?${params}`;
+      }
+      const data = await api(endpoint);
       state.search.results = Array.isArray(data) ? data : data.results || [];
     } catch (err) {
       toast(`Search failed: ${err.message}`, 'error');
@@ -600,89 +609,6 @@
     } catch (err) {
       toast(`Failed to load session: ${err.message}`, 'error');
     }
-  }
-
-  // ── Recall ─────────────────────────────────────────────────────────────────
-
-  const doRecall = debounce(async () => {
-    const q = state.recall.query.trim();
-    if (!q) {
-      state.recall.results = [];
-      renderRecallResults();
-      return;
-    }
-    state.recall.loading = true;
-    renderRecallResults();
-    try {
-      const params = new URLSearchParams({ q });
-      if (state.recall.scope !== 'all') params.set('scope', state.recall.scope);
-      params.set('semantic', state.recall.semantic);
-      const data = await api(`/sessions/recall?${params}`);
-      state.recall.results = Array.isArray(data) ? data : data.results || [];
-    } catch (err) {
-      toast(`Recall failed: ${err.message}`, 'error');
-      state.recall.results = [];
-    }
-    state.recall.loading = false;
-    renderRecallResults();
-  }, 300);
-
-  function renderRecallResults() {
-    const { results, loading, query } = state.recall;
-
-    if (loading) {
-      el.recallResults.innerHTML =
-        '<div class="loading-inline"><div class="loading-spinner small"></div><span>Searching...</span></div>';
-      el.recallEmpty.classList.add('hidden');
-      return;
-    }
-
-    if (!query.trim()) {
-      el.recallResults.innerHTML = '';
-      el.recallEmpty.classList.remove('hidden');
-      return;
-    }
-
-    if (results.length === 0) {
-      el.recallResults.innerHTML = '';
-      el.recallEmpty.querySelector('.empty-text').textContent = 'No results found';
-      el.recallEmpty.querySelector('.empty-hint').textContent = `No matches for "${query}"`;
-      el.recallEmpty.classList.remove('hidden');
-      return;
-    }
-
-    el.recallEmpty.classList.add('hidden');
-    el.recallResults.innerHTML = results
-      .map((r) => {
-        const sessionId = r.id || r.sessionId || r.session_id || '';
-        const excerpt = r.excerpt || r.text || r.content || '';
-        const role = r.role || '';
-        const score = r.score;
-        const meta = r.metadata;
-        const scope = (meta && meta.scope) || '';
-        const project = r.project || '';
-        const time = relativeTime(r.timestamp || r.date);
-        const roleIcon = role === 'user' ? 'person' : role === 'assistant' ? 'smart_toy' : 'chat';
-
-        return `<div class="result-item" data-session-id="${esc(sessionId)}" tabindex="0" role="button">
-        <div class="result-meta">
-          <span class="role-badge" data-role="${esc(role)}"><span class="material-symbols-outlined" style="font-size:12px">${roleIcon}</span> ${esc(role)}</span>
-          ${scope ? `<span class="scope-badge" data-scope="${esc(scope)}">${esc(scope)}</span>` : ''}
-          ${project ? `<span class="result-project">${esc(project)}</span>` : ''}
-          ${time ? `<span class="result-date">${time}</span>` : ''}
-          ${score != null ? `<span class="score-container">${formatScore(score, meta)}</span>` : ''}
-        </div>
-        <div class="result-excerpt">${highlightExcerpt(excerpt, query)}</div>
-      </div>`;
-      })
-      .join('');
-
-    el.recallResults.querySelectorAll('.result-item').forEach((card) => {
-      card.addEventListener('click', () => openSessionPanel(card.dataset.sessionId));
-      card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') openSessionPanel(card.dataset.sessionId);
-      });
-    });
   }
 
   // ── Embeddings ─────────────────────────────────────────────────────────────
@@ -907,24 +833,14 @@
       renderSessions();
     });
 
-    // Recall scope chips
-    el.recallScopes.addEventListener('click', (e) => {
+    // Search scope chips
+    el.searchScopes.addEventListener('click', (e) => {
       const chip = e.target.closest('.chip');
       if (!chip) return;
-      el.recallScopes.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
+      el.searchScopes.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
-      state.recall.scope = chip.dataset.scope;
-      if (state.recall.query.trim()) doRecall();
-    });
-
-    el.recallSemantic.addEventListener('change', () => {
-      state.recall.semantic = el.recallSemantic.checked;
-      if (state.recall.query.trim()) doRecall();
-    });
-
-    el.recallInput.addEventListener('input', () => {
-      state.recall.query = el.recallInput.value;
-      doRecall();
+      state.search.scope = chip.dataset.scope;
+      if (state.search.query.trim()) doSearch();
     });
 
     // Keyboard shortcuts
