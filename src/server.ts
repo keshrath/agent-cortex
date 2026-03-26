@@ -1,11 +1,13 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { listEntries, readEntry, writeEntry, deleteEntry } from "./knowledge/store.js";
-import { gitPull, gitPush, gitSync } from "./knowledge/git.js";
+import { gitPull, gitPush, gitSync, ensureRepo } from "./knowledge/git.js";
 import { searchKnowledge } from "./knowledge/search.js";
 import { searchSessions } from "./sessions/search.js";
 import { listSessions, getSessionSummary } from "./sessions/summary.js";
 import { scopedSearch, type SearchScope } from "./sessions/scopes.js";
+import { backgroundIndex } from "./sessions/indexer.js";
+import { VectorStore } from "./vectorstore/index.js";
 import {
   getProjectDirs,
   getSessionFiles,
@@ -13,7 +15,7 @@ import {
   extractMessages,
   getSessionMeta,
 } from "./sessions/parser.js";
-import { getConfig } from "./types.js";
+import { getConfig, loadPersistedConfig, savePersistedConfig, getConfigLocation } from "./types.js";
 import { getVersion } from "./version.js";
 
 const CATEGORIES = ["projects", "people", "decisions", "workflows", "notes"] as const;
@@ -187,8 +189,8 @@ export function createServer(): Server {
       {
         name: "cortex_search",
         description:
-          "Recency-weighted TF-IDF search across Claude Code session conversations. " +
-          "Results are ranked by relevance × recency (30-day half-life — recent sessions score higher). " +
+          "Hybrid semantic + TF-IDF search across Claude Code session conversations. " +
+          "Results are ranked by blended relevance (semantic similarity + keyword match) × recency. " +
           "Use this to find past discussions, decisions, code snippets, or error messages.",
         inputSchema: {
           type: "object" as const,
@@ -213,6 +215,10 @@ export function createServer(): Server {
             ranked: {
               type: "boolean",
               description: "Use TF-IDF ranking (default: true). Set false for regex mode.",
+            },
+            semantic: {
+              type: "boolean",
+              description: "Blend semantic vector similarity with TF-IDF (default: true). Falls back to pure TF-IDF if embeddings unavailable.",
             },
           },
           required: ["query"],
@@ -269,9 +275,9 @@ export function createServer(): Server {
       {
         name: "cortex_recall",
         description:
-          "Scoped recency-weighted search — search within a specific domain like errors, " +
+          "Scoped hybrid search — search within a specific domain like errors, " +
           "plans, configs, tool usage, file references, or decisions. " +
-          "Results ranked by relevance × recency (30-day half-life). " +
+          "Results ranked by blended relevance (semantic + keyword) × recency. " +
           "More targeted than cortex_search when you know what kind of information you need.",
         inputSchema: {
           type: "object" as const,
@@ -296,8 +302,47 @@ export function createServer(): Server {
               type: "number",
               description: "Maximum number of results (default: 20)",
             },
+            semantic: {
+              type: "boolean",
+              description: "Blend semantic vector similarity with TF-IDF (default: true). Falls back to pure TF-IDF if embeddings unavailable.",
+            },
           },
           required: ["scope", "query"],
+        },
+      },
+      {
+        name: "cortex_index_status",
+        description:
+          "Get vector store statistics: total entries, breakdown by source (knowledge vs session), " +
+          "database size, active embedding provider, and vector dimensions.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {},
+        },
+      },
+      {
+        name: "cortex_config",
+        description:
+          "View or update cortex configuration. Without arguments, returns current config. " +
+          "With arguments, persists settings to cortex-config.json. " +
+          "Set git_url to enable git sync for the knowledge base. " +
+          "Settings are persisted across restarts. Env vars override persisted values.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            git_url: {
+              type: "string",
+              description: "Git remote URL for the knowledge base (e.g. 'https://github.com/user/memory.git'). Set to empty string to remove.",
+            },
+            memory_dir: {
+              type: "string",
+              description: "Local directory for the knowledge base. Set to empty string to reset to default.",
+            },
+            auto_distill: {
+              type: "boolean",
+              description: "Enable/disable automatic session distillation into the knowledge base (default: true).",
+            },
+          },
         },
       },
     ],
@@ -363,7 +408,8 @@ export function createServer(): Server {
           const role = validateEnum(optionalString(a, "role"), ["user", "assistant", "all"] as const, "role") ?? "all";
           const maxResults = optionalNumber(a, "max_results", 1, 500) ?? 20;
           const ranked = optionalBoolean(a, "ranked") ?? true;
-          const results = searchSessions(query, { project, role, maxResults, ranked });
+          const semantic = optionalBoolean(a, "semantic") ?? true;
+          const results = await searchSessions(query, { project, role, maxResults, ranked, semantic });
           return ok(results);
         }
 
@@ -415,8 +461,70 @@ export function createServer(): Server {
           const query = requireString(a, "query");
           const project = optionalString(a, "project");
           const maxResults = optionalNumber(a, "max_results", 1, 500) ?? 20;
-          const results = scopedSearch(scope as SearchScope, query, { project, maxResults });
+          const semantic = optionalBoolean(a, "semantic") ?? true;
+          const results = await scopedSearch(scope as SearchScope, query, { project, maxResults, semantic });
           return ok(results);
+        }
+
+        case "cortex_index_status": {
+          const store = new VectorStore();
+          const stats = store.stats();
+          return ok(stats);
+        }
+
+        case "cortex_config": {
+          const gitUrlArg = optionalString(a, "git_url");
+          const memoryDirArg = optionalString(a, "memory_dir");
+          const autoDistillArg = optionalBoolean(a, "auto_distill");
+
+          const hasUpdates = gitUrlArg !== undefined || memoryDirArg !== undefined || autoDistillArg !== undefined;
+
+          if (hasUpdates) {
+            const updates: Record<string, unknown> = {};
+            if (gitUrlArg !== undefined) updates.gitUrl = gitUrlArg || undefined;
+            if (memoryDirArg !== undefined) updates.memoryDir = memoryDirArg || undefined;
+            if (autoDistillArg !== undefined) updates.autoDistill = autoDistillArg;
+            savePersistedConfig(updates);
+
+            const newConfig = getConfig();
+            if (gitUrlArg && gitUrlArg.length > 0) {
+              const repoResult = ensureRepo(newConfig.memoryDir, newConfig.gitUrl);
+              return ok({
+                message: "Config saved",
+                repoSetup: repoResult,
+                config: {
+                  gitUrl: newConfig.gitUrl,
+                  memoryDir: newConfig.memoryDir,
+                  autoDistill: newConfig.autoDistill,
+                  embeddingProvider: newConfig.embeddingProvider,
+                },
+              });
+            }
+
+            return ok({
+              message: "Config saved",
+              config: {
+                gitUrl: newConfig.gitUrl,
+                memoryDir: newConfig.memoryDir,
+                autoDistill: newConfig.autoDistill,
+                embeddingProvider: newConfig.embeddingProvider,
+              },
+            });
+          }
+
+          const persisted = loadPersistedConfig();
+          return ok({
+            active: {
+              gitUrl: config.gitUrl ?? null,
+              memoryDir: config.memoryDir,
+              autoDistill: config.autoDistill,
+              embeddingProvider: config.embeddingProvider,
+              embeddingAlpha: config.embeddingAlpha,
+            },
+            persisted,
+            configFile: getConfigLocation(),
+            note: "Config stored at a tool-agnostic location. Env vars override persisted config.",
+          });
         }
 
         default:
@@ -427,6 +535,12 @@ export function createServer(): Server {
       return err(`Error in ${name}: ${message}`);
     }
   });
+
+  const startupConfig = getConfig();
+  const repoResult = ensureRepo(startupConfig.memoryDir, startupConfig.gitUrl);
+  console.error(`[cortex] Repo init: ${repoResult.message}`);
+
+  setTimeout(() => backgroundIndex().catch(err => console.error('[cortex] Background index failed:', err)), 5000);
 
   return server;
 }

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execSync } from 'child_process';
-import { gitPull, gitPush, gitSync } from '../src/knowledge/git.js';
+import { gitPull, gitPush, gitSync, ensureRepo } from '../src/knowledge/git.js';
 
 function makeTmpGitRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cortex-git-test-'));
@@ -82,6 +82,61 @@ describe('gitPush', () => {
     await gitPush(tmpDir, 'test `whoami` $(echo hack) "quotes" & | ;');
     const log = execSync('git log -1 --format=%s', { cwd: tmpDir, stdio: 'pipe' }).toString().trim();
     expect(log).toContain('test');
+  });
+});
+
+describe('ensureRepo', () => {
+  let tmpDir: string;
+
+  afterEach(() => {
+    if (tmpDir && fs.existsSync(tmpDir)) {
+      cleanup(tmpDir);
+    }
+  });
+
+  it('returns no-op for existing git repo', () => {
+    tmpDir = makeTmpGitRepo();
+    const result = ensureRepo(tmpDir);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('already exists');
+  });
+
+  it('creates local-only dir with categories when no git URL', () => {
+    tmpDir = path.join(os.tmpdir(), `cortex-ensure-${Date.now()}`);
+    const result = ensureRepo(tmpDir);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('local-only');
+    expect(fs.existsSync(path.join(tmpDir, 'projects'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'people'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'decisions'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'workflows'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'notes'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.git'))).toBe(false);
+  });
+
+  it('clones remote repo when dir does not exist and gitUrl provided', () => {
+    const bareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cortex-bare-'));
+    execSync('git init --bare', { cwd: bareDir, stdio: 'pipe' });
+
+    tmpDir = path.join(os.tmpdir(), `cortex-clone-${Date.now()}`);
+    const result = ensureRepo(tmpDir, bareDir);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('cloned');
+    expect(fs.existsSync(path.join(tmpDir, '.git'))).toBe(true);
+    cleanup(bareDir);
+  });
+
+  it('inits repo with remote when dir exists but is not a git repo', () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cortex-init-'));
+    const bareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cortex-bare2-'));
+    execSync('git init --bare', { cwd: bareDir, stdio: 'pipe' });
+
+    const result = ensureRepo(tmpDir, bareDir);
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('initialized');
+    expect(fs.existsSync(path.join(tmpDir, '.git'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'projects'))).toBe(true);
+    cleanup(bareDir);
   });
 });
 
