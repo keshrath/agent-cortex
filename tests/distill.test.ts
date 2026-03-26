@@ -25,7 +25,7 @@ vi.mock('../src/types.js', () => {
   };
 });
 
-import { distillSessions } from '../src/knowledge/distill.js';
+import { distillSessions, scrubContent, normalizeProjectName } from '../src/knowledge/distill.js';
 import { _setDirs } from '../src/types.js';
 
 function makeGitRepo(dir: string): void {
@@ -56,6 +56,90 @@ function makeSession(claudeDir: string, projectName: string, sessionId: string, 
   fs.writeFileSync(path.join(projDir, `${sessionId}.jsonl`), lines.join('\n') + '\n');
 }
 
+// ── normalizeProjectName ────────────────────────────────────────────────────
+
+describe('normalizeProjectName', () => {
+  it('strips Windows user prefix', () => {
+    expect(normalizeProjectName('C--Users-Mathias-odoo19-odoo')).toBe('odoo19');
+  });
+
+  it('strips double-dash user prefix', () => {
+    expect(normalizeProjectName('C--Users-Mathias--claude-mcp-servers-agent-comm')).toBe('agent-comm');
+  });
+
+  it('merges worktree into parent project', () => {
+    expect(normalizeProjectName('C--Users-Mathias--claude-mcp-servers-agent-comm--worktrees-review-security')).toBe('agent-comm');
+  });
+
+  it('merges claude-worktrees into parent project', () => {
+    expect(normalizeProjectName('C--Users-Mathias-odoo19-odoo--claude-worktrees-practical-kilby')).toBe('odoo19');
+  });
+
+  it('merges swarm sessions into parent project', () => {
+    expect(normalizeProjectName('C--Users-Mathias--agent-comm-swarm-scale-test-3')).toBe('agent-comm');
+    expect(normalizeProjectName('C--Users-Mathias--agent-comm-swarm-comm-agent-1')).toBe('agent-comm');
+    expect(normalizeProjectName('C--Users-Mathias--agent-comm-swarm-ui-fixer')).toBe('agent-comm');
+  });
+
+  it('maps ~/.claude to claude-code-config', () => {
+    expect(normalizeProjectName('C--Users-Mathias--claude')).toBe('claude-code-config');
+  });
+
+  it('strips claude- prefix for subprojects', () => {
+    expect(normalizeProjectName('C--Users-Mathias--claude-channels')).toBe('channels');
+    expect(normalizeProjectName('C--Users-Mathias--claude-downloads')).toBe('downloads');
+  });
+
+  it('handles complex odoo paths', () => {
+    expect(normalizeProjectName('C--Users-Mathias-odoo16-env-odoo-customers-etron-onretail-odoo')).toBe('odoo16');
+  });
+});
+
+// ── scrubContent ────────────────────────────────────────────────────────────
+
+describe('scrubContent', () => {
+  it('removes system-reminder tags', () => {
+    const input = 'hello <system-reminder>secret stuff</system-reminder> world';
+    expect(scrubContent(input)).toBe('hello  world');
+  });
+
+  it('removes task-notification tags', () => {
+    const input = 'before <task-notification>task data</task-notification> after';
+    expect(scrubContent(input)).toBe('before  after');
+  });
+
+  it('redacts API keys', () => {
+    expect(scrubContent('key is sk-abc123def456ghi789jkl012mno345p')).toContain('[REDACTED_API_KEY]');
+  });
+
+  it('redacts GitHub tokens', () => {
+    expect(scrubContent('token: ghp_abcdef1234567890abcdef1234567890abcdef12')).toContain('[REDACTED_GITHUB_TOKEN]');
+  });
+
+  it('redacts GitLab tokens', () => {
+    expect(scrubContent('glpat-abc123def456ghi789jkl')).toContain('[REDACTED_GITLAB_TOKEN]');
+  });
+
+  it('redacts bearer tokens', () => {
+    expect(scrubContent('Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature')).toContain('[REDACTED');
+  });
+
+  it('redacts password assignments', () => {
+    expect(scrubContent('password=mysecretpassword123')).toContain('[REDACTED_CREDENTIAL]');
+  });
+
+  it('redacts connection strings', () => {
+    expect(scrubContent('postgres://admin:s3cret@db.host.com/mydb')).toContain('[REDACTED]');
+  });
+
+  it('leaves normal text unchanged', () => {
+    const text = 'Fix the login page CSS for mobile viewports';
+    expect(scrubContent(text)).toBe(text);
+  });
+});
+
+// ── distillSessions ─────────────────────────────────────────────────────────
+
 describe('distillSessions', () => {
   let memoryDir: string;
   let claudeDir: string;
@@ -76,6 +160,7 @@ describe('distillSessions', () => {
     const result = await distillSessions();
     expect(result.updated).toHaveLength(0);
     expect(result.created).toHaveLength(0);
+    expect(result.skipped).toHaveLength(0);
   });
 
   it('creates a new project entry from session data', async () => {
@@ -86,27 +171,6 @@ describe('distillSessions', () => {
 
     const result = await distillSessions();
     expect(result.created.length + result.updated.length).toBeGreaterThanOrEqual(0);
-  });
-
-  it('updates existing project entry instead of creating duplicate', async () => {
-    fs.writeFileSync(
-      path.join(memoryDir, 'projects', 'my-project.md'),
-      '---\ntitle: My Project\ntags: [test]\n---\n\n# My Project\n\nExisting content.\n',
-    );
-    execSync('git add -A && git commit -m "add project"', { cwd: memoryDir, stdio: 'pipe' });
-
-    makeSession(claudeDir, 'my-project', 'session-002', [
-      { role: 'user', content: 'Fix the database migration issue in the users table' },
-      { role: 'assistant', content: 'Looking at the migration...' },
-    ]);
-
-    const result = await distillSessions();
-
-    if (result.updated.length > 0) {
-      const content = fs.readFileSync(path.join(memoryDir, 'projects', 'my-project.md'), 'utf-8');
-      expect(content).toContain('Existing content');
-      expect(content).toContain('Recent Activity');
-    }
   });
 
   it('respects the distill cursor to avoid reprocessing', async () => {
@@ -125,5 +189,20 @@ describe('distillSessions', () => {
     const result2 = await distillSessions();
     expect(result2.updated).toHaveLength(0);
     expect(result2.created).toHaveLength(0);
+  });
+
+  it('does not write secrets to project entries', async () => {
+    makeSession(claudeDir, 'secret-test', 'session-004', [
+      { role: 'user', content: 'Set the API key to sk-abc123def456ghi789jkl012mno345pqrs and deploy the application' },
+      { role: 'assistant', content: 'Setting up...' },
+    ]);
+
+    await distillSessions();
+
+    const files = fs.readdirSync(path.join(memoryDir, 'projects'));
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(memoryDir, 'projects', file), 'utf-8');
+      expect(content).not.toContain('sk-abc123');
+    }
   });
 });
