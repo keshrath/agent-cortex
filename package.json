@@ -8,7 +8,7 @@
     "agent-cortex": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-ui.js",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest run",
