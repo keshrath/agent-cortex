@@ -78,7 +78,7 @@ function serveStatic(uiDir: string, reqPath: string, res: http.ServerResponse): 
     return;
   }
 
-  if (decoded.includes('') || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(decoded)) {
+  if (decoded.includes('\0') || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(decoded)) {
     errorResponse(res, 'Forbidden', 403);
     return;
   }
