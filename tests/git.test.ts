@@ -112,6 +112,13 @@ describe('ensureRepo', () => {
     expect(fs.existsSync(path.join(tmpDir, 'workflows'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, 'notes'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.git'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'README.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.gitignore'))).toBe(true);
+    const readme = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
+    expect(readme).toContain('Knowledge Base');
+    const gitignore = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8');
+    expect(gitignore).toContain('.env');
+    expect(gitignore).toContain('*.pem');
   });
 
   it('clones remote repo when dir does not exist and gitUrl provided', () => {

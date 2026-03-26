@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 export interface GitResult {
@@ -73,12 +73,124 @@ export async function gitSync(dir: string): Promise<{ pull: GitResult; push: Git
   return { pull, push };
 }
 
+// ── Scaffold templates ──────────────────────────────────────────────────────
+
+const SCAFFOLD_GITIGNORE = `# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Secrets — never commit these
+.env
+.env.*
+*.pem
+*.key
+credentials.*
+secrets.*
+
+# Obsidian — keep config, ignore workspace cache
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache/
+`;
+
+const SCAFFOLD_README = `# Knowledge Base
+
+Shared knowledge base managed by [agent-cortex](https://github.com/keshrath/agent-cortex).
+
+## Structure
+
+\`\`\`
+├── projects/    — Per-project context, architecture, tech stacks
+├── people/      — Team members, roles, contacts
+├── decisions/   — Architecture decisions, trade-offs
+├── workflows/   — Processes, deployment steps, runbooks
+└── notes/       — General notes, research, ideas
+\`\`\`
+
+## Auto-Distillation
+
+Agent-cortex automatically distills session insights into \`projects/\` entries:
+- Topics discussed, tools used, files touched
+- All content is scrubbed for secrets before committing
+- Runs after each server startup
+
+## Usage
+
+### Via MCP tools
+
+- \`cortex_list\` / \`cortex_read\` / \`cortex_write\` — browse and edit entries
+- \`cortex_search\` — hybrid semantic + keyword search
+- \`cortex_sync\` — manual git pull + push
+- \`cortex_config\` — view or update settings
+
+### File format
+
+Markdown with optional YAML frontmatter:
+
+\`\`\`markdown
+---
+title: My Project
+tags: [backend, api]
+updated: 2026-01-01
+---
+
+# My Project
+
+Content here.
+\`\`\`
+
+## Security
+
+Content is scrubbed before every git push:
+- API keys, tokens, passwords, JWTs, private keys → redacted
+- System noise (XML tags, task notifications) → stripped
+- Absolute user paths → normalized to \`~/\`
+- Final audit blocks writes that still contain sensitive patterns
+`;
+
+/**
+ * Write scaffold files (README, .gitignore, category dirs) into a new
+ * knowledge base directory. Skips files that already exist.
+ */
+function scaffoldRepo(dir: string): void {
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  for (const cat of CATEGORIES) {
+    const catDir = join(dir, cat);
+    if (!existsSync(catDir)) {
+      mkdirSync(catDir, { recursive: true });
+    }
+  }
+
+  const readme = join(dir, 'README.md');
+  if (!existsSync(readme)) {
+    writeFileSync(readme, SCAFFOLD_README, 'utf-8');
+  }
+
+  const gitignore = join(dir, '.gitignore');
+  if (!existsSync(gitignore)) {
+    writeFileSync(gitignore, SCAFFOLD_GITIGNORE, 'utf-8');
+  }
+}
+
+// ── Repo initialization ─────────────────────────────────────────────────────
+
 /**
  * Ensure the memory directory exists and is a git repo.
  *
- * - If dir missing + gitUrl set → clone
- * - If dir exists but not a git repo + gitUrl set → init + remote add + initial commit
- * - If dir missing + no gitUrl → create local-only dir with category folders
+ * - If dir missing + gitUrl set → clone, then scaffold missing files
+ * - If dir exists but not a git repo + gitUrl set → scaffold + init + push
+ * - If dir missing + no gitUrl → scaffold local-only dir
  * - If dir exists + is a git repo → no-op
  */
 export function ensureRepo(dir: string, gitUrl?: string): GitResult {
@@ -89,25 +201,23 @@ export function ensureRepo(dir: string, gitUrl?: string): GitResult {
   }
 
   if (!existsSync(dir) && gitUrl) {
-    // Clone the remote repo
     try {
       execGit(['clone', gitUrl, dir], process.cwd(), 30_000);
+      scaffoldRepo(dir);
+      try {
+        execGit(['add', '-A'], dir, 5_000);
+        execGit(['diff', '--cached', '--quiet'], dir, 5_000);
+      } catch {
+        execGit(['commit', '-m', 'add scaffold files'], dir, 5_000);
+        execGit(['push', '--quiet'], dir, 15_000);
+      }
       return { success: true, message: `cloned ${gitUrl} into ${dir}` };
     } catch (err) {
       return { success: false, message: err instanceof Error ? err.message : String(err) };
     }
   }
 
-  // Ensure the directory exists with category subdirs
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  for (const cat of CATEGORIES) {
-    const catDir = join(dir, cat);
-    if (!existsSync(catDir)) {
-      mkdirSync(catDir, { recursive: true });
-    }
-  }
+  scaffoldRepo(dir);
 
   if (gitUrl) {
     try {
