@@ -678,10 +678,18 @@
     state.panel = { open: false, type: null, data: null };
     el.sidePanel.classList.remove('open');
     el.contentWrapper.classList.remove('panel-visible');
-    el.sidePanel.addEventListener('transitionend', function handler() {
+    el.sidePanel.addEventListener(
+      'transitionend',
+      function handler() {
+        if (!state.panel.open) el.sidePanel.hidden = true;
+        el.sidePanel.removeEventListener('transitionend', handler);
+      },
+      { once: true },
+    );
+    // Fallback: hide after 400ms if transitionend doesn't fire
+    setTimeout(() => {
       if (!state.panel.open) el.sidePanel.hidden = true;
-      el.sidePanel.removeEventListener('transitionend', handler);
-    });
+    }, 400);
   }
 
   function stripFrontmatter(content) {

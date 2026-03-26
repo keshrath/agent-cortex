@@ -872,7 +872,6 @@ h1 {
 .side-panel.open {
   width: var(--panel-width);
   min-width: 320px;
-  overflow: hidden;
 }
 
 /* ── Panel Resize Handle ───────────────────────────────────────────────── */
