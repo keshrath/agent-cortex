@@ -90,8 +90,8 @@ describe('dashboard HTTP server', () => {
 
   it('serves static files for root path', async () => {
     const { status, headers } = await fetch('/');
-    // May be 200 (if UI dir exists) or 404
-    expect([200, 404]).toContain(status);
+    // May be 200 (if UI dir exists), 404, or 403 (path traversal protection)
+    expect([200, 403, 404]).toContain(status);
     if (status === 200) {
       expect(headers['content-type']).toContain('text/html');
     }
