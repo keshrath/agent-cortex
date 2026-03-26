@@ -187,8 +187,8 @@ export function createServer(): Server {
       {
         name: "cortex_search",
         description:
-          "TF-IDF ranked search across Claude Code session conversations. " +
-          "Searches message content and returns matches with context and relevance scores. " +
+          "Recency-weighted TF-IDF search across Claude Code session conversations. " +
+          "Results are ranked by relevance × recency (30-day half-life — recent sessions score higher). " +
           "Use this to find past discussions, decisions, code snippets, or error messages.",
         inputSchema: {
           type: "object" as const,
@@ -269,8 +269,9 @@ export function createServer(): Server {
       {
         name: "cortex_recall",
         description:
-          "Scoped search across sessions — search within a specific domain like errors, " +
+          "Scoped recency-weighted search — search within a specific domain like errors, " +
           "plans, configs, tool usage, file references, or decisions. " +
+          "Results ranked by relevance × recency (30-day half-life). " +
           "More targeted than cortex_search when you know what kind of information you need.",
         inputSchema: {
           type: "object" as const,

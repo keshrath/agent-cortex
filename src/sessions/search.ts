@@ -1,4 +1,4 @@
-import { TfIdfIndex } from '../search/tfidf.js';
+import { TfIdfIndex, recencyDecay } from '../search/tfidf.js';
 import { buildExcerpt } from '../search/excerpt.js';
 import {
   getProjectDirs,
@@ -102,28 +102,37 @@ function rankedSearch(
     }
   }
 
-  const ranked = index.search(query, maxResults);
+  const ranked = index.search(query, maxResults * 2); // over-fetch before decay reranking
 
-  return ranked
+  const results = ranked
     .map(({ id, score }) => {
       const doc = docMap.get(id);
       if (!doc) return null;
       const excerpt = buildExcerpt(doc.content, query);
+      const ts = doc.timestamp ?? doc.sessionDate;
+      const decay = recencyDecay(ts);
+      const adjustedScore = score * decay;
 
       return {
         source: 'session' as const,
         id: doc.sessionId,
         project: doc.project,
         role: doc.role,
-        timestamp: doc.timestamp ?? doc.sessionDate,
+        timestamp: ts,
         excerpt,
-        score,
+        score: adjustedScore,
         metadata: {
           sessionDate: doc.sessionDate,
+          relevanceScore: score,
+          recencyMultiplier: Math.round(decay * 100) / 100,
         },
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  // Re-sort by adjusted score and trim
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, maxResults);
 }
 
 // ── Regex-based search (legacy mode) ────────────────────────────────────────

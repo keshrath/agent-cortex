@@ -25,6 +25,24 @@ interface DocEntry {
   totalTerms: number;
 }
 
+/**
+ * Compute a recency decay multiplier using exponential decay.
+ * Half-life is in days — after `halfLifeDays`, the multiplier is 0.5.
+ * Returns a value in (0, 1] where 1 = now, 0.5 = halfLifeDays ago, etc.
+ * Floor of 0.1 ensures very old results aren't completely invisible.
+ */
+export function recencyDecay(
+  timestamp: string | null,
+  halfLifeDays: number = 30,
+): number {
+  if (!timestamp) return 0.5; // unknown age gets neutral weight
+  const ageMs = Date.now() - new Date(timestamp).getTime();
+  if (ageMs <= 0) return 1.0;
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  const decay = Math.pow(0.5, ageDays / halfLifeDays);
+  return Math.max(decay, 0.1); // floor at 0.1
+}
+
 export class TfIdfIndex {
   private docs: Map<string, DocEntry> = new Map();
   private docFreq: Map<string, number> = new Map();

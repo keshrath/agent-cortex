@@ -608,6 +608,18 @@ h1 {
   color: var(--text-dim);
 }
 
+/* ── Recency Tag ──────────────────────────────────────────────────────── */
+.recency-tag {
+  font-size: 9px;
+  font-weight: 500;
+  margin-left: 4px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--orange-dim);
+  color: var(--orange);
+  vertical-align: middle;
+}
+
 /* ── Scope Badge ───────────────────────────────────────────────────────── */
 .scope-badge {
   font-size: 10px;

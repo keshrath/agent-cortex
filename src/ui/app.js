@@ -108,12 +108,19 @@
     }
   }
 
-  function formatScore(score) {
+  function formatScore(score, metadata) {
     if (score == null) return '';
     const pct = Math.min(Math.max(score * 100, 0), 100);
-    return `<div class="score-bar" title="Score: ${score.toFixed(3)}">
+    const recency = metadata?.recencyMultiplier;
+    const tooltip = recency != null
+      ? `Score: ${score.toFixed(3)} (relevance × ${recency} recency)`
+      : `Score: ${score.toFixed(3)}`;
+    const recencyTag = recency != null && recency < 0.95
+      ? `<span class="recency-tag" title="Recency: ${(recency * 100).toFixed(0)}%">${(recency * 100).toFixed(0)}%</span>`
+      : '';
+    return `<div class="score-bar" title="${tooltip}">
       <div class="score-fill" style="width:${pct}%"></div>
-      <span class="score-label">${score.toFixed(2)}</span>
+      <span class="score-label">${score.toFixed(2)}${recencyTag}</span>
     </div>`;
   }
 
@@ -407,6 +414,7 @@
       const excerpt = r.excerpt || r.text || r.content || '';
       const role = r.role || '';
       const score = r.score;
+      const meta = r.metadata;
       const project = r.project || '';
       const time = relativeTime(r.timestamp || r.date);
       const roleIcon = role === 'user' ? 'person' : role === 'assistant' ? 'smart_toy' : 'chat';
@@ -416,7 +424,7 @@
           <span class="role-badge" data-role="${esc(role)}"><span class="material-symbols-outlined" style="font-size:12px">${roleIcon}</span> ${esc(role)}</span>
           ${project ? `<span class="result-project">${esc(project)}</span>` : ''}
           ${time ? `<span class="result-date">${time}</span>` : ''}
-          ${score != null ? `<span class="score-container">${formatScore(score)}</span>` : ''}
+          ${score != null ? `<span class="score-container">${formatScore(score, meta)}</span>` : ''}
         </div>
         <div class="result-excerpt">${highlightExcerpt(excerpt, query)}</div>
       </div>`;
@@ -567,7 +575,8 @@
       const excerpt = r.excerpt || r.text || r.content || '';
       const role = r.role || '';
       const score = r.score;
-      const scope = (r.metadata && r.metadata.scope) || '';
+      const meta = r.metadata;
+      const scope = (meta && meta.scope) || '';
       const project = r.project || '';
       const time = relativeTime(r.timestamp || r.date);
       const roleIcon = role === 'user' ? 'person' : role === 'assistant' ? 'smart_toy' : 'chat';
@@ -578,7 +587,7 @@
           ${scope ? `<span class="scope-badge" data-scope="${esc(scope)}">${esc(scope)}</span>` : ''}
           ${project ? `<span class="result-project">${esc(project)}</span>` : ''}
           ${time ? `<span class="result-date">${time}</span>` : ''}
-          ${score != null ? `<span class="score-container">${formatScore(score)}</span>` : ''}
+          ${score != null ? `<span class="score-container">${formatScore(score, meta)}</span>` : ''}
         </div>
         <div class="result-excerpt">${highlightExcerpt(excerpt, query)}</div>
       </div>`;
