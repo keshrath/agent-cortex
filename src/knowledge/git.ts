@@ -1,22 +1,25 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 export interface GitResult {
   success: boolean;
   message: string;
 }
 
-function execGit(cmd: string, cwd: string, timeout: number): string {
+/**
+ * Run a git command safely using execFileSync (no shell).
+ */
+function execGit(args: string[], cwd: string, timeout: number): string {
   try {
-    const output = execSync(cmd, {
+    const output = execFileSync('git', args, {
       cwd,
       stdio: 'pipe',
       timeout,
-      shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/sh',
     });
     return output ? output.toString().trim() : '';
-  } catch (err: any) {
-    const msg = err.stderr ? err.stderr.toString().trim() : err.message;
-    throw new Error(`"${cmd}" failed: ${msg}`);
+  } catch (err: unknown) {
+    const e = err as { stderr?: Buffer; message?: string };
+    const msg = e.stderr ? e.stderr.toString().trim() : (e.message ?? String(err));
+    throw new Error(`git ${args[0]} failed: ${msg}`);
   }
 }
 
@@ -25,10 +28,10 @@ function execGit(cmd: string, cwd: string, timeout: number): string {
  */
 export async function gitPull(dir: string): Promise<GitResult> {
   try {
-    const output = execGit('git pull --rebase --quiet', dir, 15_000);
+    const output = execGit(['pull', '--rebase', '--quiet'], dir, 15_000);
     return { success: true, message: output || 'up to date' };
-  } catch (err: any) {
-    return { success: false, message: err.message };
+  } catch (err: unknown) {
+    return { success: false, message: err instanceof Error ? (err as Error).message : String(err) };
   }
 }
 
@@ -39,21 +42,21 @@ export async function gitPull(dir: string): Promise<GitResult> {
 export async function gitPush(dir: string, commitMsg?: string): Promise<GitResult> {
   const message = commitMsg ?? 'update knowledge base';
   try {
-    execGit('git add -A', dir, 5_000);
+    execGit(['add', '-A'], dir, 5_000);
 
     // Only commit if there are staged changes
     try {
-      execGit('git diff --cached --quiet', dir, 5_000);
+      execGit(['diff', '--cached', '--quiet'], dir, 5_000);
       // No error means no changes — skip commit
     } catch {
       // diff --cached --quiet exits non-zero when there ARE changes
-      execGit(`git commit -m "${message.replace(/"/g, '\\"')}"`, dir, 5_000);
+      execGit(['commit', '-m', message], dir, 5_000);
     }
 
-    execGit('git push --quiet', dir, 15_000);
+    execGit(['push', '--quiet'], dir, 15_000);
     return { success: true, message: 'pushed successfully' };
-  } catch (err: any) {
-    return { success: false, message: err.message };
+  } catch (err: unknown) {
+    return { success: false, message: err instanceof Error ? (err as Error).message : String(err) };
   }
 }
 

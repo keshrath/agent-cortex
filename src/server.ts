@@ -14,13 +14,69 @@ import {
   getSessionMeta,
 } from "./sessions/parser.js";
 import { getConfig } from "./types.js";
+import { getVersion } from "./version.js";
 
 const CATEGORIES = ["projects", "people", "decisions", "workflows", "notes"] as const;
 const SCOPES = ["errors", "plans", "configs", "tools", "files", "decisions", "all"] as const;
 
+// ── Input validation helpers ─────────────────────────────────────────────────
+
+function requireString(args: Record<string, unknown>, key: string, label?: string): string {
+  const val = args[key];
+  if (val === undefined || val === null || typeof val !== "string") {
+    throw new Error(`Missing or invalid required parameter: ${label ?? key} (expected string)`);
+  }
+  if (val.length === 0) {
+    throw new Error(`Parameter ${label ?? key} must not be empty`);
+  }
+  return val;
+}
+
+function optionalString(args: Record<string, unknown>, key: string): string | undefined {
+  const val = args[key];
+  if (val === undefined || val === null) return undefined;
+  if (typeof val !== "string") {
+    throw new Error(`Parameter ${key} must be a string`);
+  }
+  return val;
+}
+
+function optionalNumber(args: Record<string, unknown>, key: string, min?: number, max?: number): number | undefined {
+  const val = args[key];
+  if (val === undefined || val === null) return undefined;
+  const num = typeof val === "number" ? val : Number(val);
+  if (isNaN(num)) {
+    throw new Error(`Parameter ${key} must be a number`);
+  }
+  if (min !== undefined && num < min) {
+    throw new Error(`Parameter ${key} must be >= ${min}`);
+  }
+  if (max !== undefined && num > max) {
+    throw new Error(`Parameter ${key} must be <= ${max}`);
+  }
+  return num;
+}
+
+function optionalBoolean(args: Record<string, unknown>, key: string): boolean | undefined {
+  const val = args[key];
+  if (val === undefined || val === null) return undefined;
+  if (typeof val === "boolean") return val;
+  if (val === "true") return true;
+  if (val === "false") return false;
+  throw new Error(`Parameter ${key} must be a boolean`);
+}
+
+function validateEnum<T extends string>(val: string | undefined, allowed: readonly T[], key: string): T | undefined {
+  if (val === undefined) return undefined;
+  if (!allowed.includes(val as T)) {
+    throw new Error(`Parameter ${key} must be one of: ${allowed.join(", ")}`);
+  }
+  return val as T;
+}
+
 export function createServer(): Server {
   const server = new Server(
-    { name: "agent-cortex", version: "1.0.0" },
+    { name: "agent-cortex", version: getVersion() },
     { capabilities: { tools: {} } }
   );
 
@@ -248,41 +304,43 @@ export function createServer(): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args = {} } = request.params;
+    const a = args as Record<string, unknown>;
     const config = getConfig();
 
     try {
       switch (name) {
         case "cortex_list": {
+          const category = validateEnum(optionalString(a, "category"), CATEGORIES, "category");
+          const tag = optionalString(a, "tag");
           await gitPull(config.memoryDir);
-          const entries = listEntries(
-            config.memoryDir,
-            args.category as string | undefined,
-            args.tag as string | undefined,
-          );
+          const entries = listEntries(config.memoryDir, category, tag);
           return ok(entries);
         }
 
         case "cortex_read": {
+          const entryPath = requireString(a, "path");
           await gitPull(config.memoryDir);
-          const result = readEntry(config.memoryDir, args.path as string);
+          const result = readEntry(config.memoryDir, entryPath);
           return ok(result);
         }
 
         case "cortex_write": {
+          const category = requireString(a, "category");
+          const filename = requireString(a, "filename");
+          const content = requireString(a, "content");
+          if (content.length > 1_000_000) {
+            return err("Content too large (max 1MB)");
+          }
           await gitPull(config.memoryDir);
-          const filePath = writeEntry(
-            config.memoryDir,
-            args.category as string,
-            args.filename as string,
-            args.content as string,
-          );
+          const filePath = writeEntry(config.memoryDir, category, filename, content);
           const pushResult = await gitPush(config.memoryDir);
           return ok({ path: filePath, git: pushResult });
         }
 
         case "cortex_delete": {
+          const entryPath = requireString(a, "path");
           await gitPull(config.memoryDir);
-          const deleted = deleteEntry(config.memoryDir, args.path as string);
+          const deleted = deleteEntry(config.memoryDir, entryPath);
           const pushResult = await gitPush(config.memoryDir);
           return ok({ deleted, git: pushResult });
         }
@@ -293,30 +351,26 @@ export function createServer(): Server {
         }
 
         case "cortex_sessions": {
-          const sessions = listSessions(
-            args.project as string | undefined,
-          );
+          const project = optionalString(a, "project");
+          const sessions = listSessions(project);
           return ok(sessions);
         }
 
         case "cortex_search": {
-          const results = searchSessions(
-            args.query as string,
-            {
-              project: args.project as string | undefined,
-              role: (args.role as "user" | "assistant" | "all") ?? "all",
-              maxResults: (args.max_results as number) ?? 20,
-              ranked: (args.ranked as boolean) ?? true,
-            },
-          );
+          const query = requireString(a, "query");
+          const project = optionalString(a, "project");
+          const role = validateEnum(optionalString(a, "role"), ["user", "assistant", "all"] as const, "role") ?? "all";
+          const maxResults = optionalNumber(a, "max_results", 1, 500) ?? 20;
+          const ranked = optionalBoolean(a, "ranked") ?? true;
+          const results = searchSessions(query, { project, role, maxResults, ranked });
           return ok(results);
         }
 
         case "cortex_get": {
-          const sessionId = args.session_id as string;
-          const projectFilter = args.project as string | undefined;
-          const includeTools = (args.include_tools as boolean) ?? false;
-          const tail = args.tail as number | undefined;
+          const sessionId = requireString(a, "session_id");
+          const projectFilter = optionalString(a, "project");
+          const includeTools = optionalBoolean(a, "include_tools") ?? false;
+          const tail = optionalNumber(a, "tail", 1, 10000);
 
           const projects = getProjectDirs().filter(
             p => !projectFilter || p.name.toLowerCase().includes(projectFilter.toLowerCase()),
@@ -345,25 +399,22 @@ export function createServer(): Server {
         }
 
         case "cortex_summary": {
-          const result = getSessionSummary(
-            args.session_id as string,
-            args.project as string | undefined,
-          );
+          const sessionId = requireString(a, "session_id");
+          const project = optionalString(a, "project");
+          const result = getSessionSummary(sessionId, project);
           if (!result) {
-            return err(`Session ${args.session_id} not found.`);
+            return err(`Session ${sessionId} not found.`);
           }
           return ok(result);
         }
 
         case "cortex_recall": {
-          const results = scopedSearch(
-            args.scope as SearchScope,
-            args.query as string,
-            {
-              project: args.project as string | undefined,
-              maxResults: (args.max_results as number) ?? 20,
-            },
-          );
+          const scope = requireString(a, "scope");
+          validateEnum(scope, SCOPES, "scope");
+          const query = requireString(a, "query");
+          const project = optionalString(a, "project");
+          const maxResults = optionalNumber(a, "max_results", 1, 500) ?? 20;
+          const results = scopedSearch(scope as SearchScope, query, { project, maxResults });
           return ok(results);
         }
 

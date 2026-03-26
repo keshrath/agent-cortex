@@ -1,35 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
-
-const CLAUDE_DIR = path.join(os.homedir(), '.claude');
-const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
-
-// ── Session Cache ───────────────────────────────────────────────────────────
-// Cache parsed sessions by file path + mtime to avoid re-parsing on every search
-
-interface CachedSession {
-  mtime: number;
-  entries: SessionEntry[];
-}
-
-const sessionCache = new Map<string, CachedSession>();
-
-function getCachedOrParse(filePath: string): SessionEntry[] {
-  try {
-    const stat = fs.statSync(filePath);
-    const mtime = stat.mtimeMs;
-    const cached = sessionCache.get(filePath);
-    if (cached && cached.mtime === mtime) {
-      return cached.entries;
-    }
-    const entries = parseSessionFileRaw(filePath);
-    sessionCache.set(filePath, { mtime, entries });
-    return entries;
-  } catch {
-    return [];
-  }
-}
+import { getConfig } from '../types.js';
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -39,7 +10,7 @@ export interface SessionEntry {
   sessionId?: string;
   cwd?: string;
   gitBranch?: string;
-  message?: { role?: string; content: any };
+  message?: { role?: string; content: unknown };
   content?: string;
 }
 
@@ -62,10 +33,10 @@ export interface SessionMeta {
 // ── Parsing ─────────────────────────────────────────────────────────────────
 
 /**
- * Parse a JSONL session file into an array of entries (raw, no cache).
+ * Parse a JSONL session file into an array of entries.
  * Malformed lines are silently skipped.
  */
-function parseSessionFileRaw(filePath: string): SessionEntry[] {
+export function parseSessionFile(filePath: string): SessionEntry[] {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, 'utf-8');
@@ -85,14 +56,6 @@ function parseSessionFileRaw(filePath: string): SessionEntry[] {
   }
 
   return entries;
-}
-
-/**
- * Parse a JSONL session file with mtime-based caching.
- * Re-parses only when the file has been modified since last read.
- */
-export function parseSessionFile(filePath: string): SessionEntry[] {
-  return getCachedOrParse(filePath);
 }
 
 /**
@@ -120,8 +83,8 @@ export function extractMessages(entries: SessionEntry[]): SessionMessage[] {
         : [entry.message.content];
 
       const textParts = parts
-        .filter((p: any) => typeof p === 'string' || p.type === 'text')
-        .map((p: any) => (typeof p === 'string' ? p : p.text))
+        .filter((p: unknown) => typeof p === 'string' || (typeof p === 'object' && p !== null && 'type' in p && (p as {type: string}).type === 'text'))
+        .map((p: unknown) => (typeof p === 'string' ? p : (p as {text?: string}).text))
         .filter(Boolean);
 
       if (textParts.length > 0) {
@@ -156,6 +119,18 @@ export function extractMessages(entries: SessionEntry[]): SessionMessage[] {
  * Extract metadata from session entries (first/last entry, counts, preview).
  */
 export function getSessionMeta(entries: SessionEntry[]): SessionMeta {
+  if (entries.length === 0) {
+    return {
+      startTime: 'unknown',
+      endTime: 'unknown',
+      cwd: 'unknown',
+      branch: 'unknown',
+      messageCount: 0,
+      userMessageCount: 0,
+      preview: 'N/A',
+    };
+  }
+
   const first = entries[0];
   const last = entries[entries.length - 1];
   const userMessages = entries.filter(e => e.type === 'user');
@@ -181,14 +156,15 @@ export function getSessionMeta(entries: SessionEntry[]): SessionMeta {
  * Discover all project directories under ~/.claude/projects/
  */
 export function getProjectDirs(): Array<{ name: string; path: string }> {
-  if (!fs.existsSync(PROJECTS_DIR)) return [];
+  const { projectsDir } = getConfig();
+  if (!fs.existsSync(projectsDir)) return [];
 
   return fs
-    .readdirSync(PROJECTS_DIR, { withFileTypes: true })
+    .readdirSync(projectsDir, { withFileTypes: true })
     .filter(d => d.isDirectory())
     .map(d => ({
       name: d.name,
-      path: path.join(PROJECTS_DIR, d.name),
+      path: path.join(projectsDir, d.name),
     }));
 }
 

@@ -4,6 +4,20 @@ import path from 'path';
 export const CATEGORIES = ['projects', 'people', 'decisions', 'workflows', 'notes'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
+/**
+ * Sanitize a path component — reject null bytes and path traversal.
+ */
+export function sanitizePath(input: string): string {
+  if (input.includes('\0')) {
+    throw new Error('Path contains null bytes');
+  }
+  const normalized = input.replace(/\\/g, '/');
+  if (normalized.includes('..') || normalized.startsWith('/')) {
+    throw new Error('Path traversal not allowed');
+  }
+  return input;
+}
+
 export interface KnowledgeEntry {
   path: string;
   title: string;
@@ -17,15 +31,17 @@ export interface KnowledgeEntry {
  * Parse YAML-like frontmatter delimited by `---`.
  * Extracts title, tags (as array), updated, and any other simple key-value pairs.
  */
-export function parseFrontmatter(content: string): { meta: Record<string, any>; body: string } {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+export function parseFrontmatter(content: string): { meta: Record<string, string | string[]>; body: string } {
+  // Normalize \r\n to \n for cross-platform compatibility
+  const normalized = content.replace(/\r\n/g, '\n');
+  const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) return { meta: {}, body: content };
 
-  const meta: Record<string, any> = {};
+  const meta: Record<string, string | string[]> = {};
   for (const line of match[1].split('\n')) {
     const m = line.match(/^(\w+):\s*(.+)$/);
     if (m) {
-      let val: any = m[2].trim();
+      let val: string | string[] = m[2].trim();
       // Parse inline arrays like [tag1, tag2, tag3]
       if (val.startsWith('[') && val.endsWith(']')) {
         val = val
@@ -90,9 +106,9 @@ export function listEntries(dir: string, category?: string, tag?: string): Knowl
 
       entries.push({
         path: file,
-        title: meta.title || file.replace(/\.md$/, ''),
+        title: (typeof meta.title === 'string' ? meta.title : '') || file.replace(/\.md$/, ''),
         tags: Array.isArray(meta.tags) ? meta.tags : [],
-        updated: meta.updated || '',
+        updated: (typeof meta.updated === 'string' ? meta.updated : '') || '',
         category: entryCategory,
       });
     } catch {
@@ -108,6 +124,7 @@ export function listEntries(dir: string, category?: string, tag?: string): Knowl
  * Includes path traversal protection.
  */
 export function readEntry(dir: string, entryPath: string): { entry: KnowledgeEntry; content: string } {
+  sanitizePath(entryPath);
   const filePath = path.resolve(dir, entryPath);
 
   // Path traversal protection
@@ -126,9 +143,9 @@ export function readEntry(dir: string, entryPath: string): { entry: KnowledgeEnt
 
   const entry: KnowledgeEntry = {
     path: entryPath,
-    title: meta.title || entryPath.replace(/\.md$/, ''),
+    title: (typeof meta.title === 'string' ? meta.title : '') || entryPath.replace(/\.md$/, ''),
     tags: Array.isArray(meta.tags) ? meta.tags : [],
-    updated: meta.updated || '',
+    updated: (typeof meta.updated === 'string' ? meta.updated : '') || '',
     category: entryCategory,
     content: body,
   };
@@ -144,6 +161,11 @@ export function readEntry(dir: string, entryPath: string): { entry: KnowledgeEnt
 export function writeEntry(dir: string, category: string, filename: string, content: string): string {
   if (!CATEGORIES.includes(category as Category)) {
     throw new Error(`Invalid category: ${category}. Must be one of: ${CATEGORIES.join(', ')}`);
+  }
+
+  // Reject filenames with path separators or traversal attempts
+  if (/[/\\]/.test(filename) || filename.includes('..')) {
+    throw new Error('Filename must not contain path separators or ".."');
   }
 
   const safeName = filename.endsWith('.md') ? filename : `${filename}.md`;
@@ -170,6 +192,7 @@ export function writeEntry(dir: string, category: string, filename: string, cont
  * Returns true if the file was deleted, false if it didn't exist.
  */
 export function deleteEntry(dir: string, entryPath: string): boolean {
+  sanitizePath(entryPath);
   const filePath = path.resolve(dir, entryPath);
 
   // Path traversal protection

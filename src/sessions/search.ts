@@ -1,4 +1,5 @@
 import { TfIdfIndex } from '../search/tfidf.js';
+import { buildExcerpt } from '../search/excerpt.js';
 import {
   getProjectDirs,
   getSessionFiles,
@@ -62,22 +63,12 @@ interface DocRef {
   sessionDate: string;
 }
 
-// ── Global search index cache ───────────────────────────────────────────────
-// Builds once, reuses across searches. Invalidates after 60 seconds.
-
-let cachedIndex: TfIdfIndex | null = null;
-let cachedDocMap: Map<string, DocRef> | null = null;
-let cacheBuiltAt = 0;
-const CACHE_TTL = 60_000; // 60 seconds
-
-function getOrBuildIndex(
+function rankedSearch(
+  query: string,
   projects: Array<{ name: string; path: string }>,
-): { index: TfIdfIndex; docMap: Map<string, DocRef> } {
-  const now = Date.now();
-  if (cachedIndex && cachedDocMap && (now - cacheBuiltAt) < CACHE_TTL) {
-    return { index: cachedIndex, docMap: cachedDocMap };
-  }
-
+  role: string,
+  maxResults: number,
+): SearchResult[] {
   const index = new TfIdfIndex();
   const docMap = new Map<string, DocRef>();
   let docCounter = 0;
@@ -92,6 +83,8 @@ function getOrBuildIndex(
         const messages = extractMessages(entries);
 
         for (const msg of messages) {
+          if (role !== 'all' && msg.role !== role) continue;
+
           const docId = `doc_${docCounter++}`;
           index.addDocument(docId, msg.content);
           docMap.set(docId, {
@@ -109,43 +102,28 @@ function getOrBuildIndex(
     }
   }
 
-  cachedIndex = index;
-  cachedDocMap = docMap;
-  cacheBuiltAt = now;
-  return { index, docMap };
-}
+  const ranked = index.search(query, maxResults);
 
-function rankedSearch(
-  query: string,
-  projects: Array<{ name: string; path: string }>,
-  role: string,
-  maxResults: number,
-): SearchResult[] {
-  const { index, docMap } = getOrBuildIndex(projects);
+  return ranked
+    .map(({ id, score }) => {
+      const doc = docMap.get(id);
+      if (!doc) return null;
+      const excerpt = buildExcerpt(doc.content, query);
 
-  // Search more than needed, then filter by role
-  const searchLimit = role !== 'all' ? maxResults * 5 : maxResults;
-  const ranked = index.search(query, searchLimit);
-
-  const results: SearchResult[] = [];
-  for (const { id, score } of ranked) {
-    if (results.length >= maxResults) break;
-    const doc = docMap.get(id)!;
-    if (role !== 'all' && doc.role !== role) continue;
-
-    results.push({
-      source: 'session' as const,
-      id: doc.sessionId,
-      project: doc.project,
-      role: doc.role,
-      timestamp: doc.timestamp ?? doc.sessionDate,
-      excerpt: buildExcerpt(doc.content, query),
-      score,
-      metadata: { sessionDate: doc.sessionDate },
-    });
-  }
-
-  return results;
+      return {
+        source: 'session' as const,
+        id: doc.sessionId,
+        project: doc.project,
+        role: doc.role,
+        timestamp: doc.timestamp ?? doc.sessionDate,
+        excerpt,
+        score,
+        metadata: {
+          sessionDate: doc.sessionDate,
+        },
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 // ── Regex-based search (legacy mode) ────────────────────────────────────────
@@ -181,12 +159,11 @@ function regexSearch(
 
         for (const msg of messages) {
           if (role !== 'all' && msg.role !== role) continue;
+          // Reset lastIndex before test() — global regex is stateful
+          regex.lastIndex = 0;
           if (!regex.test(msg.content)) continue;
 
-          // Reset lastIndex for stateful regex
-          regex.lastIndex = 0;
-
-          const excerpt = buildExcerpt(msg.content, query, caseSensitive);
+          const excerpt = buildExcerpt(msg.content, query, { caseSensitive });
 
           matches.push({
             source: 'session',
@@ -214,36 +191,4 @@ function regexSearch(
   return matches;
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Build an excerpt around the first occurrence of `query` in `text`,
- * with 100 chars of context on each side.
- */
-function buildExcerpt(
-  text: string,
-  query: string,
-  caseSensitive = false,
-): string {
-  let idx: number;
-  try {
-    idx = text.search(new RegExp(query, caseSensitive ? '' : 'i'));
-  } catch {
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    idx = text.search(new RegExp(escaped, caseSensitive ? '' : 'i'));
-  }
-
-  if (idx === -1) {
-    // Fallback: return the beginning of the text
-    return text.substring(0, 300) + (text.length > 300 ? '...' : '');
-  }
-
-  const start = Math.max(0, idx - 100);
-  const end = Math.min(text.length, idx + query.length + 100);
-
-  return (
-    (start > 0 ? '...' : '') +
-    text.substring(start, end) +
-    (end < text.length ? '...' : '')
-  );
-}
+// buildExcerpt imported from ../search/excerpt.js

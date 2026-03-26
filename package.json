@@ -13,8 +13,13 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "lint": "eslint src/ tests/",
+    "clean": "rm -rf dist",
+    "lint:fix": "eslint src/ tests/ --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
   },
   "keywords": [
     "mcp",
@@ -33,6 +38,13 @@
     "@types/node": "^25.5.0",
     "@types/ws": "^8.18.1",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.1.0",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.57.2"
+  },
+  "engines": {
+    "node": ">=20.11.0"
   }
 }

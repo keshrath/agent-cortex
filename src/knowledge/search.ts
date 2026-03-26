@@ -1,4 +1,5 @@
 import { TfIdfIndex } from '../search/tfidf.js';
+import { buildExcerpt } from '../search/excerpt.js';
 import { listEntries, readEntry, KnowledgeEntry } from './store.js';
 
 export interface SearchOptions {
@@ -11,38 +12,6 @@ export interface SearchResult {
   entry: KnowledgeEntry;
   score: number;
   excerpt: string;
-}
-
-/**
- * Extract an excerpt around the first match of a query in the text.
- * Shows ~100 chars before the match and ~200 chars after.
- */
-function extractExcerpt(text: string, query: string, caseSensitive: boolean): string {
-  const flags = caseSensitive ? 'g' : 'gi';
-  let regex: RegExp;
-  try {
-    regex = new RegExp(query, flags);
-  } catch {
-    regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
-  }
-
-  const match = regex.exec(text);
-  if (!match) {
-    // No match found — return first 300 chars
-    return text.substring(0, 300) + (text.length > 300 ? '...' : '');
-  }
-
-  const matchStart = match.index;
-  const matchEnd = matchStart + match[0].length;
-  const start = Math.max(0, matchStart - 100);
-  const end = Math.min(text.length, matchEnd + 200);
-
-  let excerpt = '';
-  if (start > 0) excerpt += '...';
-  excerpt += text.substring(start, end).trim();
-  if (end < text.length) excerpt += '...';
-
-  return excerpt;
 }
 
 /**
@@ -92,7 +61,7 @@ export function searchKnowledge(
       results.push({
         entry: doc.entry,
         score: result.score,
-        excerpt: extractExcerpt(doc.content, query, caseSensitive),
+        excerpt: buildExcerpt(doc.content, query, { caseSensitive, contextAfter: 200 }),
       });
     }
     return results;
@@ -109,12 +78,12 @@ export function searchKnowledge(
 
   const regexResults: SearchResult[] = [];
   for (const doc of documents) {
+    regex.lastIndex = 0; // Reset before test() — global regex is stateful
     if (regex.test(doc.content)) {
-      regex.lastIndex = 0; // Reset after test()
       regexResults.push({
         entry: doc.entry,
         score: 1,
-        excerpt: extractExcerpt(doc.content, query, caseSensitive),
+        excerpt: buildExcerpt(doc.content, query, { caseSensitive, contextAfter: 200 }),
       });
       if (regexResults.length >= maxResults) break;
     }

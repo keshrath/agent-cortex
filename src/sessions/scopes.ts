@@ -1,4 +1,13 @@
-import { searchSessions } from './search.js';
+import {
+  getProjectDirs,
+  getSessionFiles,
+  parseSessionFile,
+  extractMessages,
+  getSessionMeta,
+  type SessionMessage,
+} from './parser.js';
+import { TfIdfIndex } from '../search/tfidf.js';
+import { buildExcerpt } from '../search/excerpt.js';
 import type { SearchResult } from '../search/types.js';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -32,8 +41,8 @@ const SCOPE_PATTERNS: Record<Exclude<SearchScope, 'all' | 'tools'>, RegExp> = {
 /**
  * Perform a search scoped to a specific category of content.
  *
- * Uses the shared cached TF-IDF index from searchSessions, then post-filters
- * results by scope patterns. Much faster than building a separate index.
+ * Each scope pre-filters messages by role/content patterns, then applies TF-IDF
+ * ranking with the user query on the remaining messages.
  */
 export function scopedSearch(
   scope: SearchScope,
@@ -42,37 +51,97 @@ export function scopedSearch(
 ): SearchResult[] {
   const { project, maxResults = 20 } = options;
 
-  const role = scope === 'tools' ? 'all' : 'all';
-  const candidates = searchSessions(query, {
-    project,
-    role,
-    maxResults: maxResults * 5, // over-fetch for filtering
-    ranked: true,
-  });
+  const projects = getProjectDirs().filter(
+    p => !project || p.name.toLowerCase().includes(project.toLowerCase()),
+  );
 
-  if (scope === 'all') {
-    return candidates.slice(0, maxResults).map(r => ({
-      ...r,
-      metadata: { ...r.metadata, scope },
-    }));
-  }
+  const index = new TfIdfIndex();
+  const docMap = new Map<
+    string,
+    {
+      project: string;
+      sessionId: string;
+      role: string;
+      timestamp: string | null;
+      content: string;
+      sessionDate: string;
+    }
+  >();
+  let docCounter = 0;
 
-  // Post-filter by scope pattern
-  const pattern = scope === 'tools' ? null : SCOPE_PATTERNS[scope];
-  const filtered: SearchResult[] = [];
+  for (const proj of projects) {
+    const sessions = getSessionFiles(proj.path);
+    for (const sess of sessions) {
+      try {
+        const entries = parseSessionFile(sess.file);
+        if (entries.length === 0) continue;
+        const meta = getSessionMeta(entries);
+        const messages = extractMessages(entries);
 
-  for (const result of candidates) {
-    if (filtered.length >= maxResults) break;
+        const filtered = filterByScope(scope, messages);
 
-    if (scope === 'tools') {
-      if (result.role === 'tool_use' || result.role === 'tool_result') {
-        filtered.push({ ...result, metadata: { ...result.metadata, scope } });
+        for (const msg of filtered) {
+          const docId = `doc_${docCounter++}`;
+          // Index the message content combined with the query context
+          index.addDocument(docId, msg.content);
+          docMap.set(docId, {
+            project: proj.name,
+            sessionId: sess.id,
+            role: msg.role,
+            timestamp: msg.timestamp,
+            content: msg.content,
+            sessionDate: meta.startTime,
+          });
+        }
+      } catch {
+        // skip broken files
       }
-    } else if (pattern && pattern.test(result.excerpt)) {
-      filtered.push({ ...result, metadata: { ...result.metadata, scope } });
     }
   }
 
-  return filtered;
+  const ranked = index.search(query, maxResults);
+
+  return ranked
+    .map(({ id, score }) => {
+      const doc = docMap.get(id);
+      if (!doc) return null;
+      const excerpt = buildExcerpt(doc.content, query);
+
+      return {
+        source: 'session' as const,
+        id: doc.sessionId,
+        project: doc.project,
+        role: doc.role,
+        timestamp: doc.timestamp ?? doc.sessionDate,
+        excerpt,
+        score,
+        metadata: {
+          scope,
+          sessionDate: doc.sessionDate,
+        },
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
+// ── Scope filters ───────────────────────────────────────────────────────────
+
+function filterByScope(
+  scope: SearchScope,
+  messages: SessionMessage[],
+): SessionMessage[] {
+  if (scope === 'all') {
+    return messages;
+  }
+
+  if (scope === 'tools') {
+    return messages.filter(
+      m => m.role === 'tool_use' || m.role === 'tool_result',
+    );
+  }
+
+  const pattern = SCOPE_PATTERNS[scope];
+  return messages.filter(m => pattern.test(m.content));
+}
+
+// buildExcerpt imported from ../search/excerpt.js
