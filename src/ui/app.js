@@ -826,10 +826,48 @@
     }, 5000);
   }
 
+  // Panel resize handle (drag to resize like agent-tasks)
+  function initPanelResize() {
+    const panel = document.getElementById('side-panel');
+    if (!panel) return;
+    const handle = document.createElement('div');
+    handle.className = 'panel-resize-handle';
+    panel.appendChild(handle);
+
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    handle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startWidth = panel.offsetWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const dx = startX - e.clientX;
+      const newWidth = Math.max(320, Math.min(startWidth + dx, window.innerWidth * 0.8));
+      panel.style.width = newWidth + 'px';
+      panel.style.minWidth = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isResizing) return;
+      isResizing = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+  }
+
   // Start
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => { init(); initPanelResize(); });
   } else {
     init();
+    initPanelResize();
   }
 })();

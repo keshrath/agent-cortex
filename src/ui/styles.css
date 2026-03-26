@@ -758,13 +758,38 @@ h1 {
 .side-panel.open {
   width: var(--panel-width);
   min-width: 320px;
-  resize: horizontal;
-  overflow: auto;
-  direction: rtl; /* resize handle on left side */
+  overflow: hidden;
 }
 
-.side-panel.open > * {
-  direction: ltr;
+/* ── Panel Resize Handle ───────────────────────────────────────────────── */
+.panel-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.panel-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 40px;
+  border-radius: 2px;
+  background: var(--border);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.panel-resize-handle:hover::after,
+.panel-resize-handle:active::after {
+  opacity: 1;
+  background: var(--accent);
 }
 
 .panel-header {
