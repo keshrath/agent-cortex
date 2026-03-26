@@ -1213,6 +1213,76 @@ h1 {
   border-width: 2px;
 }
 
+/* ── Semantic Toggle ───────────────────────────────────────────────────── */
+.semantic-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  user-select: none;
+  margin-bottom: 16px;
+}
+.semantic-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+.semantic-toggle .toggle-icon {
+  font-size: 16px;
+}
+
+/* ── Embeddings Dashboard ─────────────────────────────────────────────── */
+.embeddings-dashboard {
+  padding: 1rem 0;
+}
+.embedding-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+.embedding-stat-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.embedding-stat-card .stat-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.embedding-stat-card .stat-number {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+.embedding-stat-card .stat-detail {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ── Score Type Indicator ─────────────────────────────────────────────── */
+.score-type {
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+  font-weight: 500;
+}
+.score-type.hybrid {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.score-type.tfidf {
+  background: rgba(128, 128, 128, 0.15);
+  color: var(--text-secondary);
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .side-panel.open {

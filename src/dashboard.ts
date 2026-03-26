@@ -14,6 +14,7 @@ import {
 import { searchSessions } from './sessions/search.js';
 import { listSessions, getSessionSummary } from './sessions/summary.js';
 import { scopedSearch, type SearchScope } from './sessions/scopes.js';
+import { VectorStore } from './vectorstore/index.js';
 import { getConfig } from './types.js';
 import { getVersion } from './version.js';
 
@@ -163,6 +164,24 @@ async function handleApi(
       return true;
     }
 
+    if (pathname === '/api/index-status') {
+      try {
+        const store = new VectorStore();
+        const stats = store.stats();
+        jsonResponse(res, stats);
+      } catch {
+        jsonResponse(res, {
+          totalEntries: 0,
+          knowledgeEntries: 0,
+          sessionEntries: 0,
+          dbSizeMB: 0,
+          provider: null,
+          dimensions: 0,
+        });
+      }
+      return true;
+    }
+
     if (pathname === '/api/knowledge/search') {
       const q = url.searchParams.get('q') || '';
       const category = url.searchParams.get('category') || undefined;
@@ -198,7 +217,7 @@ async function handleApi(
       const maxResults = url.searchParams.get('max_results');
       const ranked = url.searchParams.get('ranked') !== 'false';
       const project = url.searchParams.get('project') || undefined;
-      const results = searchSessions(q, {
+      const results = await searchSessions(q, {
         role: role as 'user' | 'assistant' | 'all',
         maxResults: maxResults ? parseInt(maxResults, 10) : 20,
         ranked,
@@ -213,7 +232,7 @@ async function handleApi(
       const q = url.searchParams.get('q') || '';
       const maxResults = url.searchParams.get('max_results');
       const project = url.searchParams.get('project') || undefined;
-      const results = scopedSearch(scope, q, {
+      const results = await scopedSearch(scope, q, {
         maxResults: maxResults ? parseInt(maxResults, 10) : 20,
         project,
       });

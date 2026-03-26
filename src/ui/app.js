@@ -6,9 +6,10 @@
   const state = {
     activeTab: 'knowledge',
     knowledge: { entries: [], activeCategory: 'all' },
-    search: { query: '', results: [], role: 'all', ranked: true, loading: false },
+    search: { query: '', results: [], role: 'all', ranked: true, semantic: false, loading: false },
     sessions: { list: [], projectFilter: '', loading: false },
-    recall: { scope: 'all', query: '', results: [], loading: false },
+    recall: { scope: 'all', query: '', results: [], loading: false, semantic: true },
+    embeddings: { stats: null, loading: false },
     panel: { open: false, type: null, data: null },
     stats: { knowledgeCount: 0, sessionCount: 0 },
     connected: false,
@@ -17,8 +18,8 @@
   // ── DOM refs ───────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
   const el = {
-    tabs: { knowledge: $('tab-knowledge'), search: $('tab-search'), sessions: $('tab-sessions'), recall: $('tab-recall') },
-    views: { knowledge: $('view-knowledge'), search: $('view-search'), sessions: $('view-sessions'), recall: $('view-recall') },
+    tabs: { knowledge: $('tab-knowledge'), search: $('tab-search'), sessions: $('tab-sessions'), recall: $('tab-recall'), embeddings: $('tab-embeddings') },
+    views: { knowledge: $('view-knowledge'), search: $('view-search'), sessions: $('view-sessions'), recall: $('view-recall'), embeddings: $('view-embeddings') },
     knowledgeGrid: $('knowledge-grid'),
     knowledgeEmpty: $('knowledge-empty'),
     knowledgeCategories: $('knowledge-categories'),
@@ -27,6 +28,7 @@
     searchEmpty: $('search-empty'),
     searchRoleFilters: $('search-role-filters'),
     modeRanked: $('mode-ranked'),
+    modeSemantic: $('mode-semantic'),
     modeRegex: $('mode-regex'),
     sessionsList: $('sessions-list'),
     sessionsEmpty: $('sessions-empty'),
@@ -34,6 +36,7 @@
     recallInput: $('recall-input'),
     recallResults: $('recall-results'),
     recallEmpty: $('recall-empty'),
+    recallSemantic: $('recall-semantic'),
     recallScopes: $('recall-scopes'),
     sidePanel: $('side-panel'),
     panelTitle: $('panel-title'),
@@ -42,6 +45,10 @@
     connectionStatus: $('connection-status'),
     statKnowledge: $('stat-knowledge'),
     statSessions: $('stat-sessions'),
+    statVectors: $('stat-vectors'),
+    embeddingsStatsGrid: $('embedding-stats-grid'),
+    embeddingsEmpty: $('embeddings-empty'),
+    embeddingsStatus: $('embeddings-status'),
     themeToggle: $('theme-toggle'),
     version: $('version'),
     loadingOverlay: $('loading-overlay'),
@@ -111,16 +118,26 @@
   function formatScore(score, metadata) {
     if (score == null) return '';
     const pct = Math.min(Math.max(score * 100, 0), 100);
+    const tfidf = metadata?.tfidfScore;
+    const semantic = metadata?.semanticScore;
     const recency = metadata?.recencyMultiplier;
-    const tooltip = recency != null
-      ? `Score: ${score.toFixed(3)} (relevance × ${recency} recency)`
-      : `Score: ${score.toFixed(3)}`;
+    const alpha = metadata?.blendAlpha;
+
+    let tooltip = `Score: ${score.toFixed(3)}`;
+    if (tfidf != null && semantic != null) {
+      tooltip += ` (TF-IDF: ${tfidf.toFixed(2)} \u00d7 ${((alpha || 0.3) * 100).toFixed(0)}% + Semantic: ${semantic.toFixed(2)} \u00d7 ${((1 - (alpha || 0.3)) * 100).toFixed(0)}%)`;
+    }
+    if (recency != null) tooltip += ` \u00d7 recency ${(recency * 100).toFixed(0)}%`;
+
     const recencyTag = recency != null && recency < 0.95
       ? `<span class="recency-tag" title="Recency: ${(recency * 100).toFixed(0)}%">${(recency * 100).toFixed(0)}%</span>`
       : '';
+    const scoreType = (tfidf != null && semantic != null)
+      ? '<span class="score-type hybrid">hybrid</span>'
+      : (tfidf != null ? '<span class="score-type tfidf">tf-idf</span>' : '');
     return `<div class="score-bar" title="${tooltip}">
       <div class="score-fill" style="width:${pct}%"></div>
-      <span class="score-label">${score.toFixed(2)}${recencyTag}</span>
+      <span class="score-label">${score.toFixed(2)}${recencyTag}${scoreType}</span>
     </div>`;
   }
 
@@ -292,6 +309,7 @@
 
     if (name === 'knowledge' && state.knowledge.entries.length === 0) loadKnowledge();
     if (name === 'sessions' && state.sessions.list.length === 0) loadSessions();
+    if (name === 'embeddings') loadEmbeddingStats();
   }
 
   // ── Knowledge ──────────────────────────────────────────────────────────────
@@ -375,6 +393,7 @@
       const params = new URLSearchParams({ q });
       if (state.search.role !== 'all') params.set('role', state.search.role);
       params.set('ranked', state.search.ranked);
+      params.set('semantic', state.search.semantic);
       const data = await api(`/sessions/search?${params}`);
       state.search.results = Array.isArray(data) ? data : (data.results || []);
     } catch (err) {
@@ -536,6 +555,7 @@
     try {
       const params = new URLSearchParams({ q });
       if (state.recall.scope !== 'all') params.set('scope', state.recall.scope);
+      params.set('semantic', state.recall.semantic);
       const data = await api(`/sessions/recall?${params}`);
       state.recall.results = Array.isArray(data) ? data : (data.results || []);
     } catch (err) {
@@ -597,6 +617,50 @@
       card.addEventListener('click', () => openSessionPanel(card.dataset.sessionId));
       card.addEventListener('keydown', (e) => { if (e.key === 'Enter') openSessionPanel(card.dataset.sessionId); });
     });
+  }
+
+  // ── Embeddings ─────────────────────────────────────────────────────────────
+
+  async function loadEmbeddingStats() {
+    try {
+      const data = await api('/index-status');
+      state.embeddings.stats = data;
+      renderEmbeddingStats();
+      el.statVectors.querySelector('.stat-value').textContent = data.totalEntries || 0;
+    } catch {
+      state.embeddings.stats = null;
+      renderEmbeddingStats();
+    }
+  }
+
+  function renderEmbeddingStats() {
+    const stats = state.embeddings.stats;
+    if (!stats || !stats.totalEntries) {
+      el.embeddingsStatsGrid.innerHTML = '';
+      el.embeddingsStatus.style.display = 'none';
+      el.embeddingsEmpty.classList.remove('hidden');
+      return;
+    }
+
+    el.embeddingsEmpty.classList.add('hidden');
+    el.embeddingsStatus.style.display = '';
+
+    const cards = [
+      { label: 'Provider', value: stats.provider || 'Not configured', detail: '' },
+      { label: 'Dimensions', value: stats.dimensions || 0, detail: 'vector size' },
+      { label: 'Total Entries', value: stats.totalEntries || 0, detail: 'indexed chunks' },
+      { label: 'Knowledge', value: stats.knowledgeEntries || 0, detail: 'knowledge vectors' },
+      { label: 'Sessions', value: stats.sessionEntries || 0, detail: 'session vectors' },
+      { label: 'DB Size', value: (stats.dbSizeMB || 0).toFixed(1) + ' MB', detail: 'on disk' },
+    ];
+
+    el.embeddingsStatsGrid.innerHTML = cards.map((c) => `
+      <div class="embedding-stat-card">
+        <span class="stat-label">${esc(c.label)}</span>
+        <span class="stat-number">${esc(String(c.value))}</span>
+        ${c.detail ? `<span class="stat-detail">${esc(c.detail)}</span>` : ''}
+      </div>
+    `).join('');
   }
 
   // ── Side Panel ─────────────────────────────────────────────────────────────
@@ -746,20 +810,18 @@
       if (state.search.query.trim()) doSearch();
     });
 
-    // Search mode toggle
-    el.modeRanked.addEventListener('click', () => {
-      state.search.ranked = true;
-      el.modeRanked.classList.add('active');
-      el.modeRegex.classList.remove('active');
+    function setSearchMode(mode) {
+      el.modeRanked.classList.toggle('active', mode === 'ranked');
+      el.modeSemantic.classList.toggle('active', mode === 'semantic');
+      el.modeRegex.classList.toggle('active', mode === 'regex');
+      state.search.ranked = mode !== 'regex';
+      state.search.semantic = mode === 'semantic';
       if (state.search.query.trim()) doSearch();
-    });
+    }
 
-    el.modeRegex.addEventListener('click', () => {
-      state.search.ranked = false;
-      el.modeRanked.classList.remove('active');
-      el.modeRegex.classList.add('active');
-      if (state.search.query.trim()) doSearch();
-    });
+    el.modeRanked.addEventListener('click', () => setSearchMode('ranked'));
+    el.modeSemantic.addEventListener('click', () => setSearchMode('semantic'));
+    el.modeRegex.addEventListener('click', () => setSearchMode('regex'));
 
     // Session project filter
     el.sessionProjectFilter.addEventListener('change', () => {
@@ -777,7 +839,11 @@
       if (state.recall.query.trim()) doRecall();
     });
 
-    // Recall input
+    el.recallSemantic.addEventListener('change', () => {
+      state.recall.semantic = el.recallSemantic.checked;
+      if (state.recall.query.trim()) doRecall();
+    });
+
     el.recallInput.addEventListener('input', () => {
       state.recall.query = el.recallInput.value;
       doRecall();
@@ -824,7 +890,7 @@
 
     // Load initial data in parallel
     try {
-      await Promise.allSettled([loadKnowledge(), loadSessions()]);
+      await Promise.allSettled([loadKnowledge(), loadSessions(), loadEmbeddingStats()]);
     } catch {
       // individual loaders handle their own errors
     }
