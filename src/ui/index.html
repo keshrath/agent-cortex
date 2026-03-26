@@ -14,7 +14,11 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23243742'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%235d8da8'/%3E%3Ccircle cx='16' cy='6' r='2.5' fill='%235d8da8' opacity='.7'/%3E%3Ccircle cx='16' cy='26' r='2.5' fill='%235d8da8' opacity='.7'/%3E%3Ccircle cx='6' cy='16' r='2.5' fill='%235d8da8' opacity='.7'/%3E%3Ccircle cx='26' cy='16' r='2.5' fill='%235d8da8' opacity='.7'/%3E%3Cline x1='16' y1='10' x2='16' y2='8.5' stroke='%235d8da8' stroke-width='1.5' opacity='.5'/%3E%3Cline x1='16' y1='23.5' x2='16' y2='22' stroke='%235d8da8' stroke-width='1.5' opacity='.5'/%3E%3Cline x1='10' y1='16' x2='8.5' y2='16' stroke='%235d8da8' stroke-width='1.5' opacity='.5'/%3E%3Cline x1='23.5' y1='16' x2='22' y2='16' stroke='%235d8da8' stroke-width='1.5' opacity='.5'/%3E%3C/svg%3E" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='13' cy='13' r='9' fill='none' stroke='%235d8da8' stroke-width='3'/><line x1='20' y1='20' x2='28' y2='28' stroke='%235d8da8' stroke-width='3' stroke-linecap='round'/><circle cx='13' cy='13' r='4' fill='%235d8da8' opacity='.3'/></svg>"
+    />
+
     <title>agent-cortex</title>
   </head>
   <body>
@@ -39,6 +43,10 @@
           </span>
           <span class="stat-badge" id="stat-sessions" title="Sessions">
             <span class="material-symbols-outlined stat-icon">history</span>
+            <span class="stat-value">0</span>
+          </span>
+          <span class="stat-badge" id="stat-vectors" title="Vector embeddings">
+            <span class="material-symbols-outlined stat-icon">neurology</span>
             <span class="stat-value">0</span>
           </span>
         </div>
@@ -92,6 +100,17 @@
       >
         <span class="material-symbols-outlined tab-icon">psychology</span>
         Recall
+      </button>
+      <button
+        id="tab-embeddings"
+        class="tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="view-embeddings"
+        data-view="embeddings"
+      >
+        <span class="material-symbols-outlined tab-icon">neurology</span>
+        Embeddings
       </button>
     </nav>
 
@@ -171,6 +190,9 @@
             <div class="mode-toggle" role="group" aria-label="Search mode">
               <button class="mode-btn active" id="mode-ranked" data-mode="ranked" title="TF-IDF ranked search">
                 <span class="material-symbols-outlined">sort</span>Ranked
+              </button>
+              <button class="mode-btn" id="mode-semantic" data-mode="semantic" title="Hybrid semantic + TF-IDF search">
+                <span class="material-symbols-outlined">neurology</span>Semantic
               </button>
               <button class="mode-btn" id="mode-regex" data-mode="regex" title="Regular expression search">
                 <span class="material-symbols-outlined">code</span>Regex
@@ -254,11 +276,37 @@
               aria-label="Query recall"
             />
           </div>
+          <label class="semantic-toggle" title="Enable semantic similarity search">
+            <input type="checkbox" id="recall-semantic" checked />
+            <span class="material-symbols-outlined toggle-icon">neurology</span>
+            Semantic
+          </label>
           <div id="recall-results" class="results-list"></div>
           <div id="recall-empty" class="empty-state">
             <span class="material-symbols-outlined empty-icon">psychology</span>
             <div class="empty-text">Scoped recall across sessions</div>
             <div class="empty-hint">Select a scope and enter a query to recall relevant information</div>
+          </div>
+        </section>
+
+        <!-- ===== Embeddings Tab ===== -->
+        <section
+          id="view-embeddings"
+          class="view"
+          role="tabpanel"
+          aria-labelledby="tab-embeddings"
+          hidden
+        >
+          <div class="view-header">
+            <h2><span class="material-symbols-outlined view-icon">neurology</span>Embeddings</h2>
+          </div>
+          <div id="embeddings-status" class="embeddings-dashboard">
+            <div class="embedding-stats-grid" id="embedding-stats-grid"></div>
+          </div>
+          <div id="embeddings-empty" class="empty-state">
+            <span class="material-symbols-outlined empty-icon">neurology</span>
+            <div class="empty-text">Vector index not initialized</div>
+            <div class="empty-hint">Embeddings are generated automatically on server startup</div>
           </div>
         </section>
 
