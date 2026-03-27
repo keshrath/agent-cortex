@@ -24,7 +24,9 @@ async function createProvider(cfg: EmbeddingConfig): Promise<EmbeddingProvider |
   switch (cfg.provider) {
     case 'local': {
       const { LocalEmbeddingProvider } = await import('./local.js');
-      const provider = new LocalEmbeddingProvider(cfg.modelOverride);
+      const idleEnv = process.env.KNOWLEDGE_EMBEDDING_IDLE_TIMEOUT;
+      const idleTimeoutMs = idleEnv !== undefined ? parseInt(idleEnv, 10) * 1000 : 60_000;
+      const provider = new LocalEmbeddingProvider(cfg.modelOverride, undefined, idleTimeoutMs);
       if (await provider.isAvailable()) return provider;
       console.error('[knowledge] Local embedding model unavailable');
       return null;

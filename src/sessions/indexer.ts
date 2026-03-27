@@ -124,7 +124,7 @@ export async function backgroundIndex(): Promise<void> {
           console.error(`[knowledge] Indexed ${indexed}/${total} knowledge entries...`);
         }
 
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 500));
       } catch (err) {
         console.error(`[knowledge] Failed to index knowledge entry ${entry.path}: ${err}`);
       }
@@ -182,7 +182,8 @@ export async function backgroundIndex(): Promise<void> {
             console.error(`[knowledge] Indexed ${indexedSessions}/${totalSessions} sessions...`);
           }
 
-          await new Promise((r) => setTimeout(r, 100));
+          // Throttle: 500ms pause between sessions to avoid pegging CPU
+          await new Promise((r) => setTimeout(r, 500));
         } catch (err) {
           console.error(`[knowledge] Failed to index session ${sess.id}: ${err}`);
           indexedSessions++;

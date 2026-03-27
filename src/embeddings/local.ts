@@ -3,25 +3,44 @@ import type { EmbeddingProvider } from './types.js';
 const DEFAULT_MODEL = 'Xenova/all-MiniLM-L6-v2';
 const DEFAULT_DIMENSIONS = 384;
 const DEFAULT_BATCH_SIZE = 32;
-
-let _pipeline: ReturnType<typeof createPipeline> | null = null;
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
 
 type PipelineFn = (
   texts: string[],
   options: { pooling: string; normalize: boolean },
-) => Promise<{ tolist(): number[][] }>;
+) => Promise<{ tolist(): number[][]; dispose?: () => void }>;
 
-async function createPipeline(model: string): Promise<PipelineFn | null> {
+let _pipeline: PipelineFn | null = null;
+let _pipelineLoading: Promise<PipelineFn | null> | null = null;
+let _idleTimer: ReturnType<typeof setTimeout> | null = null;
+let _idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
+
+async function loadPipeline(model: string): Promise<PipelineFn | null> {
   try {
+    console.error(`[knowledge] Loading embedding model ${model}...`);
     const { pipeline } = await import('@huggingface/transformers');
     const pipe = await pipeline('feature-extraction', model, {
       dtype: 'fp32',
     });
+    console.error(`[knowledge] Embedding model loaded`);
     return pipe as unknown as PipelineFn;
   } catch (err) {
     console.error(`[knowledge] Failed to load embedding model ${model}:`, err);
     return null;
   }
+}
+
+function resetIdleTimer(): void {
+  if (_idleTimer) clearTimeout(_idleTimer);
+  if (_idleTimeoutMs <= 0) return;
+  _idleTimer = setTimeout(() => {
+    if (_pipeline) {
+      console.error('[knowledge] Unloading embedding model (idle timeout)');
+      _pipeline = null;
+      _pipelineLoading = null;
+    }
+    _idleTimer = null;
+  }, _idleTimeoutMs);
 }
 
 export class LocalEmbeddingProvider implements EmbeddingProvider {
@@ -30,15 +49,18 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   readonly model: string;
   private readonly batchSize: number;
 
-  constructor(modelOverride?: string, batchSize?: number) {
+  constructor(modelOverride?: string, batchSize?: number, idleTimeoutMs?: number) {
     this.model = modelOverride || DEFAULT_MODEL;
     this.dimensions = DEFAULT_DIMENSIONS;
     this.batchSize = batchSize ?? DEFAULT_BATCH_SIZE;
+    if (idleTimeoutMs !== undefined) _idleTimeoutMs = idleTimeoutMs;
   }
 
   async embed(texts: string[]): Promise<number[][]> {
     const pipe = await this.getPipeline();
     if (!pipe) return texts.map(() => []);
+
+    resetIdleTimer();
 
     const results: number[][] = [];
     for (let i = 0; i < texts.length; i += this.batchSize) {
@@ -55,6 +77,8 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
         results.push(...batch.map(() => []));
       }
     }
+
+    resetIdleTimer();
     return results;
   }
 
@@ -69,9 +93,14 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   }
 
   private async getPipeline(): Promise<PipelineFn | null> {
-    if (!_pipeline) {
-      _pipeline = createPipeline(this.model);
+    if (_pipeline) return _pipeline;
+    if (!_pipelineLoading) {
+      _pipelineLoading = loadPipeline(this.model).then((pipe) => {
+        _pipeline = pipe;
+        if (pipe) resetIdleTimer();
+        return pipe;
+      });
     }
-    return _pipeline;
+    return _pipelineLoading;
   }
 }

@@ -169,15 +169,16 @@ npm run lint          # Type-check (tsc --noEmit)
 
 ## Environment Variables
 
-| Variable                       | Default           | Description                                                      |
-| ------------------------------ | ----------------- | ---------------------------------------------------------------- |
-| `KNOWLEDGE_MEMORY_DIR`         | `~/claude-memory` | Path to git-synced knowledge base                                |
-| `KNOWLEDGE_GIT_URL`            | --                | Git remote URL (auto-clones if dir missing)                      |
-| `KNOWLEDGE_AUTO_DISTILL`       | `true`            | Auto-distill session insights to knowledge base                  |
-| `KNOWLEDGE_EMBEDDING_PROVIDER` | `local`           | Embedding provider: `local`, `openai`, `claude`, `gemini`        |
-| `KNOWLEDGE_EMBEDDING_ALPHA`    | `0.3`             | TF-IDF vs semantic blend weight (0=pure semantic, 1=pure TF-IDF) |
-| `CLAUDE_DIR`                   | `~/.claude`       | Directory containing session transcripts (JSONL files)           |
-| `KNOWLEDGE_PORT`               | `3423`            | Dashboard HTTP port                                              |
+| Variable                           | Default           | Description                                                       |
+| ---------------------------------- | ----------------- | ----------------------------------------------------------------- |
+| `KNOWLEDGE_MEMORY_DIR`             | `~/claude-memory` | Path to git-synced knowledge base                                 |
+| `KNOWLEDGE_GIT_URL`                | --                | Git remote URL (auto-clones if dir missing)                       |
+| `KNOWLEDGE_AUTO_DISTILL`           | `true`            | Auto-distill session insights to knowledge base                   |
+| `KNOWLEDGE_EMBEDDING_PROVIDER`     | `local`           | Embedding provider: `local`, `openai`, `claude`, `gemini`         |
+| `KNOWLEDGE_EMBEDDING_ALPHA`        | `0.3`             | TF-IDF vs semantic blend weight (0=pure semantic, 1=pure TF-IDF)  |
+| `KNOWLEDGE_EMBEDDING_IDLE_TIMEOUT` | `60`              | Seconds before unloading local model from memory (0 = keep alive) |
+| `CLAUDE_DIR`                       | `~/.claude`       | Directory containing session transcripts (JSONL files)            |
+| `KNOWLEDGE_PORT`                   | `3423`            | Dashboard HTTP port                                               |
 
 ## Documentation
 
