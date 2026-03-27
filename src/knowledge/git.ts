@@ -203,18 +203,22 @@ export function ensureRepo(dir: string, gitUrl?: string): GitResult {
   if (!existsSync(dir) && gitUrl) {
     try {
       execGit(['clone', gitUrl, dir], process.cwd(), 30_000);
-      scaffoldRepo(dir);
-      try {
-        execGit(['add', '-A'], dir, 5_000);
-        execGit(['diff', '--cached', '--quiet'], dir, 5_000);
-      } catch {
-        execGit(['commit', '-m', 'add scaffold files'], dir, 5_000);
-        execGit(['push', '--quiet'], dir, 15_000);
-      }
-      return { success: true, message: `cloned ${gitUrl} into ${dir}` };
     } catch (err) {
       return { success: false, message: err instanceof Error ? err.message : String(err) };
     }
+    scaffoldRepo(dir);
+    try {
+      execGit(['add', '-A'], dir, 5_000);
+      execGit(['diff', '--cached', '--quiet'], dir, 5_000);
+    } catch {
+      try {
+        execGit(['commit', '-m', 'add scaffold files'], dir, 5_000);
+        execGit(['push', '--quiet'], dir, 15_000);
+      } catch {
+        /* push scaffold back may fail — that's ok */
+      }
+    }
+    return { success: true, message: `cloned ${gitUrl} into ${dir}` };
   }
 
   scaffoldRepo(dir);
