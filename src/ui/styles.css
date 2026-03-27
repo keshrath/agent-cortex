@@ -448,12 +448,11 @@ h1 {
 .search-controls {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
-}
-.search-controls .mode-toggle {
-  margin-left: auto;
+  overflow-x: auto;
 }
 
 .mode-toggle {
