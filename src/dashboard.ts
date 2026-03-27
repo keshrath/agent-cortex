@@ -149,13 +149,11 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
   try {
     if (pathname === '/health') {
       const entries = listEntries(memoryDir);
-      const sessions = listSessions();
       jsonResponse(res, {
         status: 'ok',
         version: VERSION,
         uptime: process.uptime(),
         knowledge_entries: entries.length,
-        sessions: sessions.length,
       });
       return true;
     }
@@ -317,14 +315,11 @@ async function buildStateSnapshot(): Promise<object> {
   const config = getConfig();
   try {
     const knowledge = listEntries(config.memoryDir);
-    const sessions = listSessions();
     return {
       type: 'state',
       knowledge: knowledge || [],
-      sessions: sessions || [],
       stats: {
         knowledge_entries: knowledge.length,
-        session_count: sessions.length,
         uptime: process.uptime(),
         version: VERSION,
       },
@@ -333,8 +328,7 @@ async function buildStateSnapshot(): Promise<object> {
     return {
       type: 'state',
       knowledge: [],
-      sessions: [],
-      stats: { knowledge_entries: 0, session_count: 0, uptime: process.uptime(), version: VERSION },
+      stats: { knowledge_entries: 0, uptime: process.uptime(), version: VERSION },
     };
   }
 }

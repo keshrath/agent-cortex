@@ -892,7 +892,7 @@
 
     // Load initial data in parallel
     try {
-      await Promise.allSettled([loadKnowledge(), loadSessions(), loadEmbeddingStats()]);
+      await Promise.allSettled([loadKnowledge(), loadEmbeddingStats()]);
     } catch {
       // individual loaders handle their own errors
     }

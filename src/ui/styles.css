@@ -109,6 +109,8 @@ body {
   background: var(--bg);
   height: 100%;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -872,7 +874,6 @@ h1 {
 .side-panel.open {
   width: var(--panel-width);
   min-width: 320px;
-  overflow: visible;
 }
 
 .panel-body {
