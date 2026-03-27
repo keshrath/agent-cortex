@@ -2,8 +2,9 @@ import type { EmbeddingProvider } from './types.js';
 
 const DEFAULT_MODEL = 'Xenova/all-MiniLM-L6-v2';
 const DEFAULT_DIMENSIONS = 384;
-const DEFAULT_BATCH_SIZE = 32;
+const DEFAULT_BATCH_SIZE = 8;
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
+const DEFAULT_NUM_THREADS = 1;
 
 type PipelineFn = (
   texts: string[],
@@ -15,14 +16,28 @@ let _pipelineLoading: Promise<PipelineFn | null> | null = null;
 let _idleTimer: ReturnType<typeof setTimeout> | null = null;
 let _idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
 
+const _numThreads = parseInt(
+  process.env.KNOWLEDGE_EMBEDDING_THREADS ?? String(DEFAULT_NUM_THREADS),
+  10,
+);
+process.env.ONNX_NUM_THREADS = String(_numThreads);
+process.env.OMP_NUM_THREADS = String(_numThreads);
+
 async function loadPipeline(model: string): Promise<PipelineFn | null> {
   try {
-    console.error(`[knowledge] Loading embedding model ${model}...`);
+    console.error(
+      `[knowledge] Loading embedding model ${model} (quantized, ${_numThreads} thread(s))...`,
+    );
     const { pipeline } = await import('@huggingface/transformers');
+
     const pipe = await pipeline('feature-extraction', model, {
-      dtype: 'fp32',
-    });
-    console.error(`[knowledge] Embedding model loaded`);
+      dtype: 'q8',
+      session_options: {
+        intraOpNumThreads: _numThreads,
+        interOpNumThreads: _numThreads,
+      },
+    } as Record<string, unknown>);
+    console.error(`[knowledge] Embedding model loaded (threads: ${_numThreads})`);
     return pipe as unknown as PipelineFn;
   } catch (err) {
     console.error(`[knowledge] Failed to load embedding model ${model}:`, err);

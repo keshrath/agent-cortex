@@ -84,7 +84,12 @@ function validateEnum<T extends string>(
   return val as T;
 }
 
-export function createServer(): Server {
+export interface ServerOptions {
+  /** Only the leader instance (dashboard owner) runs background indexing. */
+  isLeader?: boolean;
+}
+
+export function createServer(options?: ServerOptions): Server {
   const server = new Server(
     { name: 'agent-knowledge', version: getVersion() },
     { capabilities: { tools: {} } },
@@ -568,11 +573,17 @@ export function createServer(): Server {
   const repoResult = ensureRepo(startupConfig.memoryDir, startupConfig.gitUrl);
   console.error(`[knowledge] Repo init: ${repoResult.message}`);
 
-  setTimeout(
-    () =>
-      backgroundIndex().catch((err) => console.error('[knowledge] Background index failed:', err)),
-    5000,
-  );
+  if (options?.isLeader !== false) {
+    setTimeout(
+      () =>
+        backgroundIndex().catch((err) =>
+          console.error('[knowledge] Background index failed:', err),
+        ),
+      5000,
+    );
+  } else {
+    console.error('[knowledge] Follower instance — skipping background indexing');
+  }
 
   return server;
 }

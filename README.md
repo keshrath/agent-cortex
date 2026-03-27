@@ -182,9 +182,9 @@ npm run lint          # Type-check (tsc --noEmit)
 
 ## Documentation
 
-- [Setup Guide](docs/SETUP.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Dashboard](docs/DASHBOARD.md)
+- [Setup Guide](docs/SETUP.md) — installation, client setup (Claude Code, OpenCode, Cursor, Windsurf), hooks
+- [Architecture](docs/ARCHITECTURE.md) — source structure, design principles, database schema
+- [Dashboard](docs/DASHBOARD.md) — web UI views and features
 - [Changelog](CHANGELOG.md)
 
 ## License

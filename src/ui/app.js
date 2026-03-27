@@ -18,7 +18,7 @@
     sessions: { list: [], projectFilter: '', loading: false },
     embeddings: { stats: null, loading: false },
     panel: { open: false, type: null, data: null },
-    stats: { knowledgeCount: 0, sessionCount: 0 },
+    stats: { knowledgeCount: 0, sessionCount: 0, vectorCount: 0 },
     connected: false,
   };
 
@@ -252,6 +252,7 @@
         if (msg.stats) {
           state.stats.knowledgeCount = msg.stats.knowledge_entries || 0;
           state.stats.sessionCount = msg.stats.session_count || 0;
+          state.stats.vectorCount = msg.stats.vector_count || 0;
           if (msg.stats.version) el.version.textContent = 'v' + msg.stats.version;
           updateStats();
         }
@@ -269,6 +270,7 @@
         if (msg.data) {
           if (msg.data.knowledgeCount != null) state.stats.knowledgeCount = msg.data.knowledgeCount;
           if (msg.data.sessionCount != null) state.stats.sessionCount = msg.data.sessionCount;
+          if (msg.data.vectorCount != null) state.stats.vectorCount = msg.data.vectorCount;
           updateStats();
         }
         break;
@@ -296,6 +298,7 @@
   function updateStats() {
     el.statKnowledge.querySelector('.stat-value').textContent = state.stats.knowledgeCount;
     el.statSessions.querySelector('.stat-value').textContent = state.stats.sessionCount;
+    el.statVectors.querySelector('.stat-value').textContent = state.stats.vectorCount;
   }
 
   // ── Theme ──────────────────────────────────────────────────────────────────
@@ -641,9 +644,13 @@
     const cards = [
       { label: 'Provider', value: stats.provider || 'Not configured', detail: '' },
       { label: 'Dimensions', value: stats.dimensions || 0, detail: 'vector size' },
-      { label: 'Total Entries', value: stats.totalEntries || 0, detail: 'indexed chunks' },
-      { label: 'Knowledge', value: stats.knowledgeEntries || 0, detail: 'knowledge vectors' },
-      { label: 'Sessions', value: stats.sessionEntries || 0, detail: 'session vectors' },
+      { label: 'Total Chunks', value: stats.totalEntries || 0, detail: 'indexed chunks' },
+      { label: 'Knowledge', value: stats.knowledgeEntries || 0, detail: 'knowledge chunks' },
+      {
+        label: 'Sessions',
+        value: stats.uniqueSessions || 0,
+        detail: `${stats.sessionEntries || 0} chunks`,
+      },
       { label: 'DB Size', value: (stats.dbSizeMB || 0).toFixed(1) + ' MB', detail: 'on disk' },
     ];
 

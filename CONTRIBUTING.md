@@ -56,7 +56,7 @@ export KNOWLEDGE_PORT=3423
 agent-knowledge/
   src/
     index.ts              Entry point (MCP stdio + dashboard auto-start)
-    server.ts             MCP server, 10 tool definitions, request routing
+    server.ts             MCP server, 12 tool definitions, request routing
     dashboard.ts          HTTP + WebSocket server, REST API, file watcher
     types.ts              KnowledgeConfig, getConfig()
     knowledge/

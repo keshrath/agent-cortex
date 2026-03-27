@@ -168,6 +168,7 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
           totalEntries: 0,
           knowledgeEntries: 0,
           sessionEntries: 0,
+          uniqueSessions: 0,
           dbSizeMB: 0,
           provider: null,
           dimensions: 0,
@@ -315,11 +316,27 @@ async function buildStateSnapshot(): Promise<object> {
   const config = getConfig();
   try {
     const knowledge = listEntries(config.memoryDir);
+    const projects = getProjectDirs();
+    let sessionCount = 0;
+    for (const proj of projects) {
+      sessionCount += getSessionFiles(proj.path).length;
+    }
+
+    let vectorCount = 0;
+    try {
+      const store = new VectorStore();
+      vectorCount = store.stats().totalEntries;
+    } catch {
+      /* vector store may not be ready */
+    }
+
     return {
       type: 'state',
       knowledge: knowledge || [],
       stats: {
         knowledge_entries: knowledge.length,
+        session_count: sessionCount,
+        vector_count: vectorCount,
         uptime: process.uptime(),
         version: VERSION,
       },
@@ -328,7 +345,13 @@ async function buildStateSnapshot(): Promise<object> {
     return {
       type: 'state',
       knowledge: [],
-      stats: { knowledge_entries: 0, uptime: process.uptime(), version: VERSION },
+      stats: {
+        knowledge_entries: 0,
+        session_count: 0,
+        vector_count: 0,
+        uptime: process.uptime(),
+        version: VERSION,
+      },
     };
   }
 }

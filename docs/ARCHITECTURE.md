@@ -35,7 +35,7 @@ graph TB
 ```
 src/
   index.ts              Entry point — MCP stdio + dashboard auto-start
-  server.ts             10 tool definitions, request routing, error handling
+  server.ts             12 tool definitions, request routing, error handling
   dashboard.ts          HTTP + WebSocket server, REST API, file watcher
   types.ts              KnowledgeConfig interface, getConfig()
   knowledge/

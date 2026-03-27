@@ -41,6 +41,7 @@ export interface VectorStoreStats {
   totalEntries: number;
   knowledgeEntries: number;
   sessionEntries: number;
+  uniqueSessions: number;
   dbSizeMB: number;
   provider: string | null;
   dimensions: number | null;
@@ -535,6 +536,7 @@ export class VectorStore {
       totalEntries: 0,
       knowledgeEntries: 0,
       sessionEntries: 0,
+      uniqueSessions: 0,
       dbSizeMB: 0,
       provider: null,
       dimensions: null,
@@ -569,6 +571,12 @@ export class VectorStore {
         .prepare("SELECT COUNT(*) as count FROM embeddings WHERE source = 'session'")
         .get() as { count: number };
 
+      const uniqueSessions = this.db
+        .prepare(
+          "SELECT COUNT(DISTINCT source_id) as count FROM embeddings WHERE source = 'session'",
+        )
+        .get() as { count: number };
+
       let dbSizeMB = 0;
       try {
         const stat = statSync(this.dbPath);
@@ -584,6 +592,7 @@ export class VectorStore {
         totalEntries: total.count,
         knowledgeEntries: knowledge.count,
         sessionEntries: session.count,
+        uniqueSessions: uniqueSessions.count,
         dbSizeMB,
         provider,
         dimensions: dimStr ? parseInt(dimStr, 10) : null,
