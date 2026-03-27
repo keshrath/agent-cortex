@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0 (2026-03-27)
+
+### Multi-Source Session Adapters
+
+agent-knowledge now auto-discovers and reads sessions from all major AI coding assistants. If a tool is installed, its sessions appear automatically in the dashboard and search results -- no configuration required.
+
+- **New adapters**: OpenCode (SQLite), Cline (JSON), Continue.dev (JSON), Aider (Markdown/JSONL)
+- **Auto-detection**: Cursor sessions discovered from `~/.cursor/projects/*/agent-transcripts/`; OpenCode from `~/.local/share/opencode/opencode.db`; Cline from VS Code globalStorage; Continue.dev from `~/.continue/sessions/`; Aider from `.aider.chat.history.md` / `.aider.llm.history` in project dirs
+- **Adapter interface**: pluggable `SessionAdapter` with `isAvailable()`, `discoverProjects()`, `listSessions()`, `parseSession()` -- add new tools by implementing one file
+- **`EXTRA_SESSION_ROOTS` env var**: comma-separated paths for additional session directories
+- **`OPENCODE_DATA_DIR` env var**: override OpenCode data location (default `~/.local/share/opencode`)
+
+### Generic Naming Refactor
+
+Removed Claude Code-specific language throughout. agent-knowledge is now fully client-agnostic.
+
+- **Config fields renamed**: `claudeDir` -> `dataDir`, `projectsDir` -> `sessionsDir`
+- **Env vars renamed**:
+  - `KNOWLEDGE_DATA_DIR` (was `CLAUDE_DIR`)
+  - `KNOWLEDGE_ANTHROPIC_API_KEY` (was `KNOWLEDGE_CLAUDE_API_KEY`)
+- **Default memory directory**: `~/agent-knowledge`
+- **Embedding class renamed**: `ClaudeEmbeddingProvider` -> `AnthropicEmbeddingProvider`
+- **Documentation**: all references updated to use generic "agent sessions" language, architecture diagrams show "Session Data Dir" instead of `~/.claude/projects`
+
 ## 1.0.0 (2026-03-26)
 
 Initial release.
@@ -30,7 +54,7 @@ Initial release.
 
 ### Knowledge Base
 
-- Git-synced markdown vault at `~/claude-memory/`
+- Git-synced markdown vault at `~/agent-knowledge/` (previously `~/claude-memory/`)
 - 5 categories: projects, people, decisions, workflows, notes
 - YAML frontmatter for metadata (title, tags, updated)
 - Auto git commit + push on writes, pull on reads

@@ -1,6 +1,6 @@
 {
   "name": "agent-knowledge",
-  "version": "1.0.13",
+  "version": "1.1.0",
   "description": "Cross-session memory and recall for AI agents — git-synced knowledge base, hybrid semantic+TF-IDF search, auto-distillation with secrets scrubbing",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
     "semantic-search",
     "model-context-protocol",
     "ai-agents",
-    "claude-code"
+    "coding-assistants"
   ],
   "author": "keshrath",
   "license": "MIT",

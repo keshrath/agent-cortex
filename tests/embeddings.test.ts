@@ -13,7 +13,7 @@ describe('getEmbeddingConfig', () => {
     delete process.env.KNOWLEDGE_EMBEDDING_ALPHA;
     delete process.env.KNOWLEDGE_OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
-    delete process.env.KNOWLEDGE_CLAUDE_API_KEY;
+    delete process.env.KNOWLEDGE_ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.KNOWLEDGE_GEMINI_API_KEY;
     delete process.env.GEMINI_API_KEY;
@@ -24,7 +24,7 @@ describe('getEmbeddingConfig', () => {
     expect(config.provider).toBe('local');
     expect(config.alpha).toBeCloseTo(0.3);
     expect(config.openaiApiKey).toBeUndefined();
-    expect(config.claudeApiKey).toBeUndefined();
+    expect(config.anthropicApiKey).toBeUndefined();
     expect(config.geminiApiKey).toBeUndefined();
     expect(config.modelOverride).toBeUndefined();
   });
@@ -58,19 +58,19 @@ describe('getEmbeddingConfig', () => {
     expect(config.openaiApiKey).toBe('sk-fallback');
   });
 
-  it('reads claude key from KNOWLEDGE_CLAUDE_API_KEY', async () => {
-    process.env.KNOWLEDGE_CLAUDE_API_KEY = 'sk-ant-test';
+  it('reads claude key from KNOWLEDGE_ANTHROPIC_API_KEY', async () => {
+    process.env.KNOWLEDGE_ANTHROPIC_API_KEY = 'sk-ant-test';
     const { getEmbeddingConfig } = await import('../src/embeddings/types.js');
     const config = getEmbeddingConfig();
-    expect(config.claudeApiKey).toBe('sk-ant-test');
+    expect(config.anthropicApiKey).toBe('sk-ant-test');
   });
 
-  it('falls back to ANTHROPIC_API_KEY if KNOWLEDGE_CLAUDE_API_KEY not set', async () => {
-    delete process.env.KNOWLEDGE_CLAUDE_API_KEY;
+  it('falls back to ANTHROPIC_API_KEY if KNOWLEDGE_ANTHROPIC_API_KEY not set', async () => {
+    delete process.env.KNOWLEDGE_ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = 'sk-ant-fallback';
     const { getEmbeddingConfig } = await import('../src/embeddings/types.js');
     const config = getEmbeddingConfig();
-    expect(config.claudeApiKey).toBe('sk-ant-fallback');
+    expect(config.anthropicApiKey).toBe('sk-ant-fallback');
   });
 
   it('reads gemini key from KNOWLEDGE_GEMINI_API_KEY', async () => {
@@ -115,7 +115,7 @@ describe('getEmbeddingProvider', () => {
     const provider = await getEmbeddingProvider({
       provider: 'claude',
       alpha: 0.3,
-      claudeApiKey: undefined,
+      anthropicApiKey: undefined,
     });
     expect(provider).toBeNull();
   });
@@ -175,18 +175,18 @@ describe('OpenAIEmbeddingProvider', () => {
   });
 });
 
-describe('ClaudeEmbeddingProvider', () => {
+describe('AnthropicEmbeddingProvider', () => {
   it('has correct default name, dimensions, and model', async () => {
-    const { ClaudeEmbeddingProvider } = await import('../src/embeddings/claude.js');
-    const provider = new ClaudeEmbeddingProvider('sk-ant-test');
+    const { AnthropicEmbeddingProvider } = await import('../src/embeddings/anthropic.js');
+    const provider = new AnthropicEmbeddingProvider('sk-ant-test');
     expect(provider.name).toBe('claude');
     expect(provider.dimensions).toBe(512);
     expect(provider.model).toBe('voyage-3-lite');
   });
 
   it('accepts a model override', async () => {
-    const { ClaudeEmbeddingProvider } = await import('../src/embeddings/claude.js');
-    const provider = new ClaudeEmbeddingProvider('sk-ant-test', 'voyage-3');
+    const { AnthropicEmbeddingProvider } = await import('../src/embeddings/anthropic.js');
+    const provider = new AnthropicEmbeddingProvider('sk-ant-test', 'voyage-3');
     expect(provider.model).toBe('voyage-3');
   });
 });

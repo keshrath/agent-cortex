@@ -69,10 +69,10 @@ export class VectorStore {
 
   /**
    * Create a VectorStore instance.
-   * @param dbPath - Path to the SQLite database file. Defaults to `{claudeDir}/knowledge-vectors.db`.
+   * @param dbPath - Path to the SQLite database file. Defaults to `{dataDir}/knowledge-vectors.db`.
    */
   constructor(dbPath?: string) {
-    this.dbPath = dbPath ?? join(getConfig().claudeDir, 'knowledge-vectors.db');
+    this.dbPath = dbPath ?? join(getConfig().dataDir, 'knowledge-vectors.db');
   }
 
   /**

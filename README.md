@@ -5,7 +5,7 @@
 [![Tests: 280 passing](https://img.shields.io/badge/Tests-280%20passing-brightgreen.svg)]()
 [![MCP Tools: 12](https://img.shields.io/badge/MCP%20Tools-12-blueviolet.svg)]()
 
-**Cross-session memory and recall for AI agents** -- git-synced knowledge base, hybrid semantic+TF-IDF search, auto-distillation with secrets scrubbing.
+**Cross-session memory and recall for AI coding assistants** -- works with Claude Code, Cursor, OpenCode, Cline, Continue.dev, and Aider out of the box. Git-synced knowledge base, hybrid semantic+TF-IDF search, auto-distillation with secrets scrubbing.
 
 <table>
 <tr>
@@ -20,23 +20,40 @@
 
 ## Why
 
-Claude Code sessions are ephemeral. When a session ends, everything it learned -- architecture decisions, debugging insights, project context -- is gone. The next session starts from scratch.
+AI coding sessions are ephemeral. When a session ends, everything it learned -- architecture decisions, debugging insights, project context -- is gone. The next session starts from scratch.
 
 **agent-knowledge** solves this with two complementary systems:
 
 1. **Knowledge Base** -- a git-synced markdown vault of structured entries (decisions, workflows, project context) that persists across sessions and machines.
-2. **Session Search** -- TF-IDF ranked full-text search across JSONL session transcripts, so agents can recall what happened before.
+2. **Session Search** -- TF-IDF ranked full-text search across session transcripts from all your coding tools, so agents can recall what happened before -- regardless of which tool was used.
+
+## Supported Tools
+
+Sessions from all major AI coding assistants are auto-discovered -- if a tool is installed, its sessions appear automatically.
+
+| Tool             | Format         | Auto-detected path                                              |
+| ---------------- | -------------- | --------------------------------------------------------------- |
+| **Claude Code**  | JSONL          | `$KNOWLEDGE_DATA_DIR/projects/` (default `~/.claude/projects/`) |
+| **Cursor**       | JSONL          | `~/.cursor/projects/*/agent-transcripts/`                       |
+| **OpenCode**     | SQLite         | `~/.local/share/opencode/opencode.db` (or `$OPENCODE_DATA_DIR`) |
+| **Cline**        | JSON           | VS Code globalStorage `saoudrizwan.claude-dev/tasks/`           |
+| **Continue.dev** | JSON           | `~/.continue/sessions/`                                         |
+| **Aider**        | Markdown/JSONL | `.aider.chat.history.md` / `.aider.llm.history` in project dirs |
+
+No configuration needed. Additional session roots can be added via the `EXTRA_SESSION_ROOTS` env var (comma-separated paths).
 
 ## Features
 
+- **Multi-tool session search** -- unified search across Claude Code, Cursor, OpenCode, Cline, Continue.dev, and Aider sessions
 - **Hybrid search** -- semantic vector similarity blended with TF-IDF keyword ranking
 - **Git-synced knowledge base** -- markdown vault with YAML frontmatter, auto commit and push on writes
 - **Auto-distillation** -- session insights automatically extracted and pushed to git with secrets scrubbing
+- **Pluggable adapter system** -- add support for new tools by implementing the `SessionAdapter` interface
 - **Embeddings** -- local (Hugging Face), OpenAI, Claude/Voyage, or Gemini providers
 - **Fuzzy matching** -- typo-tolerant search using Levenshtein distance
 - **6 search scopes** -- errors, plans, configs, tools, files, decisions
 - **Configurable git URL** -- `knowledge_config` tool for runtime setup, persisted at XDG/AppData location
-- **Cross-machine persistence** -- knowledge syncs via git, sessions read from local JSONL
+- **Cross-machine persistence** -- knowledge syncs via git, sessions read from local storage of each tool
 - **Real-time dashboard** -- browse, search, and manage at `localhost:3423`
 - **Secrets scrubbing** -- API keys, tokens, passwords, private keys automatically redacted before git push
 
@@ -48,22 +65,16 @@ cd agent-knowledge
 npm install && npm run build
 ```
 
-### Configure in Claude Code
+### Configure your MCP client
+
+See [Setup Guide](docs/SETUP.md) for client-specific instructions (Claude Code, Cursor, Windsurf, OpenCode).
+
+Example (Claude Code):
 
 ```bash
 claude mcp add agent-knowledge -s user \
-  -e KNOWLEDGE_MEMORY_DIR="$HOME/claude-memory" \
+  -e KNOWLEDGE_MEMORY_DIR="$HOME/agent-knowledge" \
   -- node /path/to/agent-knowledge/dist/index.js
-```
-
-Or add to `settings.json` permissions:
-
-```json
-{
-  "permissions": {
-    "allow": ["mcp__agent-knowledge__*"]
-  }
-}
 ```
 
 Dashboard: **http://localhost:3423** (auto-starts with MCP server)
@@ -116,29 +127,44 @@ Dashboard: **http://localhost:3423** (auto-starts with MCP server)
 ```mermaid
 graph LR
     subgraph Storage
-        KB[(Knowledge Base<br/>~/claude-memory<br/>Git Repository)]
-        SF[(Session Files<br/>~/.claude/projects<br/>JSONL Logs)]
+        KB[(Knowledge Base<br/>~/agent-knowledge<br/>Git Repository)]
+    end
+
+    subgraph Session Sources
+        CC[(Claude Code<br/>JSONL)]
+        CU[(Cursor<br/>JSONL)]
+        OC[(OpenCode<br/>SQLite)]
+        CL[(Cline<br/>JSON)]
+        CD[(Continue.dev<br/>JSON)]
+        AI[(Aider<br/>MD / JSONL)]
     end
 
     subgraph agent-knowledge
         KM[Knowledge Module<br/>store / search / git]
+        AD[Session Adapters<br/>auto-discovery]
         SE[Search Engine<br/>TF-IDF + Fuzzy]
         DS[Dashboard<br/>:3423]
         MCP[MCP Server<br/>stdio]
     end
 
     subgraph Clients
-        CC[Claude Code Sessions]
+        AG[Agent Sessions]
         WB[Web Browser]
     end
 
     KB <-->|git pull/push| KM
-    SF -->|parse JSONL| SE
+    CC --> AD
+    CU --> AD
+    OC --> AD
+    CL --> AD
+    CD --> AD
+    AI --> AD
+    AD --> SE
     KM --> MCP
     SE --> MCP
     KM --> DS
     SE --> DS
-    MCP --> CC
+    MCP --> AG
     DS --> WB
 ```
 
@@ -169,16 +195,19 @@ npm run lint          # Type-check (tsc --noEmit)
 
 ## Environment Variables
 
-| Variable                           | Default           | Description                                                       |
-| ---------------------------------- | ----------------- | ----------------------------------------------------------------- |
-| `KNOWLEDGE_MEMORY_DIR`             | `~/claude-memory` | Path to git-synced knowledge base                                 |
-| `KNOWLEDGE_GIT_URL`                | --                | Git remote URL (auto-clones if dir missing)                       |
-| `KNOWLEDGE_AUTO_DISTILL`           | `true`            | Auto-distill session insights to knowledge base                   |
-| `KNOWLEDGE_EMBEDDING_PROVIDER`     | `local`           | Embedding provider: `local`, `openai`, `claude`, `gemini`         |
-| `KNOWLEDGE_EMBEDDING_ALPHA`        | `0.3`             | TF-IDF vs semantic blend weight (0=pure semantic, 1=pure TF-IDF)  |
-| `KNOWLEDGE_EMBEDDING_IDLE_TIMEOUT` | `60`              | Seconds before unloading local model from memory (0 = keep alive) |
-| `CLAUDE_DIR`                       | `~/.claude`       | Directory containing session transcripts (JSONL files)            |
-| `KNOWLEDGE_PORT`                   | `3423`            | Dashboard HTTP port                                               |
+| Variable                                            | Default             | Description                                                           |
+| --------------------------------------------------- | ------------------- | --------------------------------------------------------------------- |
+| `KNOWLEDGE_MEMORY_DIR`                              | `~/agent-knowledge` | Path to git-synced knowledge base                                     |
+| `KNOWLEDGE_GIT_URL`                                 | --                  | Git remote URL (auto-clones if dir missing)                           |
+| `KNOWLEDGE_AUTO_DISTILL`                            | `true`              | Auto-distill session insights to knowledge base                       |
+| `KNOWLEDGE_EMBEDDING_PROVIDER`                      | `local`             | Embedding provider: `local`, `openai`, `claude`, `gemini`             |
+| `KNOWLEDGE_EMBEDDING_ALPHA`                         | `0.3`               | TF-IDF vs semantic blend weight (0=pure semantic, 1=pure TF-IDF)      |
+| `KNOWLEDGE_EMBEDDING_IDLE_TIMEOUT`                  | `60`                | Seconds before unloading local model from memory (0 = keep alive)     |
+| `KNOWLEDGE_DATA_DIR`                                | `~/.claude`         | Primary session data directory (Claude Code JSONL files)              |
+| `EXTRA_SESSION_ROOTS`                               | --                  | Additional session directories, comma-separated paths                 |
+| `OPENCODE_DATA_DIR`                                 | (see below)         | Override OpenCode data directory (default: `~/.local/share/opencode`) |
+| `KNOWLEDGE_ANTHROPIC_API_KEY` / `ANTHROPIC_API_KEY` | --                  | API key for Claude/Voyage embeddings                                  |
+| `KNOWLEDGE_PORT`                                    | `3423`              | Dashboard HTTP port                                                   |
 
 ## Documentation
 

@@ -188,7 +188,7 @@ export function createServer(options?: ServerOptions): Server {
       {
         name: 'knowledge_sessions',
         description:
-          'List Claude Code sessions with metadata (timestamps, branch, message counts, preview). ' +
+          'List sessions with metadata (timestamps, branch, message counts, preview). ' +
           'Optionally filter to a specific project. Returns sessions sorted newest first.',
         inputSchema: {
           type: 'object' as const,
@@ -203,7 +203,7 @@ export function createServer(options?: ServerOptions): Server {
       {
         name: 'knowledge_search',
         description:
-          'Hybrid semantic + TF-IDF search across Claude Code session conversations. ' +
+          'Hybrid semantic + TF-IDF search across session conversations. ' +
           'Results are ranked by blended relevance (semantic similarity + keyword match) × recency. ' +
           'Use this to find past discussions, decisions, code snippets, or error messages.',
         inputSchema: {

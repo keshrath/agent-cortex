@@ -45,15 +45,16 @@ Click a result to open the session in the side panel.
 
 ## Sessions Tab
 
-Lists all Claude Code sessions with metadata:
+Lists sessions from all detected AI coding tools with metadata:
 
+- Source tool indicator (Claude Code, Cursor, OpenCode, Cline, Continue.dev, Aider)
 - Project name
-- Git branch
+- Git branch (when available)
 - Message count
 - Date
 - Preview of first user message
 
-Project filter dropdown at the top.
+Project filter dropdown at the top. Sessions from all tools are merged into a single unified list.
 
 Click a session to open the side panel with the full conversation rendered as chat bubbles.
 

@@ -31,7 +31,7 @@ export interface EmbeddingConfig {
   alpha: number;
   /** API keys for external providers */
   openaiApiKey?: string;
-  claudeApiKey?: string;
+  anthropicApiKey?: string;
   geminiApiKey?: string;
   /** Custom model override per provider */
   modelOverride?: string;
@@ -43,7 +43,7 @@ export function getEmbeddingConfig(): EmbeddingConfig {
     provider: (process.env.KNOWLEDGE_EMBEDDING_PROVIDER as ProviderName) || 'local',
     alpha: parseFloat(process.env.KNOWLEDGE_EMBEDDING_ALPHA || '0.3'),
     openaiApiKey: process.env.KNOWLEDGE_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-    claudeApiKey: process.env.KNOWLEDGE_CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY,
+    anthropicApiKey: process.env.KNOWLEDGE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
     geminiApiKey: process.env.KNOWLEDGE_GEMINI_API_KEY || process.env.GEMINI_API_KEY,
     modelOverride: process.env.KNOWLEDGE_EMBEDDING_MODEL,
   };

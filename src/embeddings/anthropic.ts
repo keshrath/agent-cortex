@@ -11,7 +11,7 @@ const ENDPOINT = 'https://api.voyageai.com/v1/embeddings';
  * Uses the Voyage AI API (Anthropic's embedding partner).
  * Accepts an Anthropic API key but prefers VOYAGE_API_KEY if set.
  */
-export class ClaudeEmbeddingProvider implements EmbeddingProvider {
+export class AnthropicEmbeddingProvider implements EmbeddingProvider {
   readonly name = 'claude';
   readonly dimensions: number;
   readonly model: string;

@@ -7,6 +7,7 @@ import {
   getSessionMeta,
   type SessionMeta,
 } from './parser.js';
+import { getAvailableAdapters } from './adapters/index.js';
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -199,7 +200,25 @@ function fastMeta(filePath: string): SessionMeta | null {
   }
 }
 
+function isVirtualDescriptor(filePath: string): boolean {
+  for (const adapter of getAvailableAdapters()) {
+    if (filePath.startsWith(`${adapter.prefix}://`)) return true;
+  }
+  return false;
+}
+
 function getCachedMeta(sess: { id: string; file: string }): SessionMeta | null {
+  // Virtual descriptors cannot use fs-based fastMeta; fall back to full parse
+  if (isVirtualDescriptor(sess.file)) {
+    const cached = metaCache.get(sess.file);
+    if (cached) return cached.meta;
+    const entries = parseSessionFile(sess.file);
+    if (entries.length === 0) return null;
+    const meta = getSessionMeta(entries);
+    metaCache.set(sess.file, { mtime: 0, meta });
+    return meta;
+  }
+
   try {
     const stat = fs.statSync(sess.file);
     const mtime = stat.mtimeMs;

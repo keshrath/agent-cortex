@@ -9,7 +9,7 @@ src/
   server.ts             MCP server, 12 tool definitions, request routing
   dashboard.ts          HTTP + WebSocket server, REST API, file watcher
   index.ts              Entry point (MCP stdio + dashboard auto-start)
-  types.ts              KnowledgeConfig, getConfig(), persisted config
+  types.ts              KnowledgeConfig (dataDir, sessionsDir, extraSessionRoots), getConfig(), persisted config
   validate.ts           ValidationError class, input validation
   version.ts            Runtime version from package.json
   knowledge/
@@ -18,11 +18,17 @@ src/
     git.ts              git pull/push/sync with timeouts
     distill.ts          Session auto-distillation with secrets scrubbing
   sessions/
-    parser.ts           JSONL parsing with mtime-based cache
+    parser.ts           Multi-format session parsing with mtime-based cache
     indexer.ts           Background indexing for sessions
     search.ts           TF-IDF ranked search with 60s global index cache
     scopes.ts           Search scopes (errors, plans, configs, tools, files, decisions)
     summary.ts          Session summaries, topic extraction, file path detection
+    adapters/
+      index.ts          SessionAdapter interface, adapter registry, auto-init
+      opencode.ts       OpenCode adapter (SQLite database)
+      cline.ts          Cline adapter (VS Code globalStorage JSON)
+      continue.ts       Continue.dev adapter (JSON session files)
+      aider.ts          Aider adapter (Markdown chat history + JSONL LLM history)
   search/
     tfidf.ts            TF-IDF scoring engine (tokenizer, stopwords, index)
     fuzzy.ts            Levenshtein distance, sliding window fuzzy matching
@@ -85,9 +91,22 @@ npm run dev        # watch mode (tsc --watch)
 - **Dashboard**: HTTP + WebSocket at port 3423, REST API for entries/sessions/search
 - **Git sync**: Auto pull/push on write, manual sync via `knowledge_sync`
 
+## Supported Session Sources
+
+Sessions are auto-discovered from all installed AI coding tools via the adapter system:
+
+- **Claude Code** -- JSONL files in `$KNOWLEDGE_DATA_DIR/projects/`
+- **Cursor** -- JSONL files in `~/.cursor/projects/*/agent-transcripts/`
+- **OpenCode** -- SQLite database at `~/.local/share/opencode/opencode.db` (or `$OPENCODE_DATA_DIR`)
+- **Cline** -- JSON task files in VS Code globalStorage `saoudrizwan.claude-dev/tasks/`
+- **Continue.dev** -- JSON session files in `~/.continue/sessions/`
+- **Aider** -- `.aider.chat.history.md` and `.aider.llm.history` in project directories
+
+Additional roots: `EXTRA_SESSION_ROOTS` env var (comma-separated). New tools: implement `SessionAdapter` in `src/sessions/adapters/`.
+
 ## Knowledge Base
 
-- Entries are Markdown files with YAML frontmatter stored in `~/claude-memory/`
+- Entries are Markdown files with YAML frontmatter stored in `~/agent-knowledge/`
 - Categories: `projects`, `people`, `decisions`, `workflows`, `notes`
 - Search: hybrid semantic (embeddings) + TF-IDF with fuzzy fallback
 - Session search scopes: `errors`, `plans`, `configs`, `tools`, `files`, `decisions`, `all`

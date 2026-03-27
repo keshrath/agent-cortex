@@ -7,8 +7,9 @@ import type { ProviderName } from './embeddings/types.js';
 
 export interface KnowledgeConfig {
   memoryDir: string;
-  claudeDir: string;
-  projectsDir: string;
+  dataDir: string;
+  sessionsDir: string;
+  extraSessionRoots: string[];
   embeddingProvider: ProviderName;
   embeddingAlpha: number;
   gitUrl: string | undefined;
@@ -72,20 +73,29 @@ export function savePersistedConfig(updates: Partial<PersistedConfig>): Persiste
 
 export function getConfig(): KnowledgeConfig {
   const home = homedir();
-  // CLAUDE_DIR is optional — defaults to ~/.claude if it exists, otherwise
-  // falls back to the platform config dir so agent-knowledge works standalone
-  // (e.g. with Cursor, Windsurf, OpenCode) without requiring Claude Code.
-  const claudeDir =
-    process.env.CLAUDE_DIR ||
-    (existsSync(join(home, '.claude')) ? join(home, '.claude') : getConfigDir());
+  // KNOWLEDGE_DATA_DIR is optional — defaults to platform config dir.
+  const dataDir = process.env.KNOWLEDGE_DATA_DIR || getConfigDir();
   const persisted = loadPersistedConfig();
 
   const memoryDir =
-    process.env.KNOWLEDGE_MEMORY_DIR ||
-    process.env.CLAUDE_MEMORY_DIR ||
-    persisted.memoryDir ||
-    join(home, 'claude-memory');
-  const projectsDir = join(claudeDir, 'projects');
+    process.env.KNOWLEDGE_MEMORY_DIR || persisted.memoryDir || join(home, 'agent-knowledge');
+  const sessionsDir = join(dataDir, 'projects');
+
+  // Extra session roots: from env var (comma-separated) + auto-detected editors
+  const extraSessionRoots: string[] = [];
+  const envRoots = process.env.EXTRA_SESSION_ROOTS;
+  if (envRoots) {
+    for (const r of envRoots.split(',')) {
+      const trimmed = r.trim();
+      if (trimmed) extraSessionRoots.push(trimmed);
+    }
+  }
+  // Auto-detect Cursor projects directory
+  const cursorProjects = join(home, '.cursor', 'projects');
+  if (existsSync(cursorProjects) && !extraSessionRoots.includes(cursorProjects)) {
+    extraSessionRoots.push(cursorProjects);
+  }
+
   const embeddingProvider =
     (process.env.KNOWLEDGE_EMBEDDING_PROVIDER as ProviderName) ||
     (persisted.embeddingProvider as ProviderName) ||
@@ -102,8 +112,9 @@ export function getConfig(): KnowledgeConfig {
 
   return {
     memoryDir,
-    claudeDir,
-    projectsDir,
+    dataDir,
+    sessionsDir,
+    extraSessionRoots,
     embeddingProvider,
     embeddingAlpha,
     gitUrl,

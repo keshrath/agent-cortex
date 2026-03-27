@@ -1,11 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import { getConfig } from '../types.js';
+import { getAvailableAdapters } from './adapters/index.js';
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
 export interface SessionEntry {
-  type: string;
+  type?: string;
+  role?: string; // Cursor Composer uses `role` instead of `type`
   timestamp?: string;
   sessionId?: string;
   cwd?: string;
@@ -37,6 +39,13 @@ export interface SessionMeta {
  * Malformed lines are silently skipped.
  */
 export function parseSessionFile(filePath: string): SessionEntry[] {
+  // Dispatch virtual descriptors to the appropriate adapter
+  for (const adapter of getAvailableAdapters()) {
+    if (filePath.startsWith(`${adapter.prefix}://`)) {
+      return adapter.parseSession(filePath);
+    }
+  }
+
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, 'utf-8');
@@ -70,14 +79,33 @@ export function extractMessages(entries: SessionEntry[]): SessionMessage[] {
 
   for (const entry of entries) {
     const ts = entry.timestamp ?? null;
+    // Support both `type` (Claude Code) and `role` (Cursor Composer) fields
+    const entryType = entry.type ?? entry.role;
 
-    if (entry.type === 'user' && entry.message?.content) {
-      const content =
-        typeof entry.message.content === 'string'
-          ? entry.message.content
-          : JSON.stringify(entry.message.content);
+    if (entryType === 'user' && entry.message?.content) {
+      // Handle both string content and array of {type:"text", text:"..."} objects
+      let content: string;
+      if (typeof entry.message.content === 'string') {
+        content = entry.message.content;
+      } else if (Array.isArray(entry.message.content)) {
+        const textParts = (entry.message.content as unknown[])
+          .filter(
+            (p: unknown) =>
+              typeof p === 'string' ||
+              (typeof p === 'object' &&
+                p !== null &&
+                'type' in p &&
+                (p as { type: string }).type === 'text'),
+          )
+          .map((p: unknown) => (typeof p === 'string' ? p : (p as { text?: string }).text))
+          .filter(Boolean);
+        content =
+          textParts.length > 0 ? textParts.join('\n') : JSON.stringify(entry.message.content);
+      } else {
+        content = JSON.stringify(entry.message.content);
+      }
       messages.push({ role: 'user', content, timestamp: ts });
-    } else if (entry.type === 'assistant' && entry.message?.content) {
+    } else if (entryType === 'assistant' && entry.message?.content) {
       const parts = Array.isArray(entry.message.content)
         ? entry.message.content
         : [entry.message.content];
@@ -101,7 +129,7 @@ export function extractMessages(entries: SessionEntry[]): SessionMessage[] {
           timestamp: ts,
         });
       }
-    } else if (entry.type === 'tool_use' || entry.type === 'tool_result') {
+    } else if (entryType === 'tool_use' || entryType === 'tool_result') {
       const content =
         typeof entry.content === 'string'
           ? entry.content
@@ -111,7 +139,7 @@ export function extractMessages(entries: SessionEntry[]): SessionMessage[] {
 
       if (content) {
         messages.push({
-          role: entry.type as 'tool_use' | 'tool_result',
+          role: entryType as 'tool_use' | 'tool_result',
           content: content.substring(0, 500),
           timestamp: ts,
         });
@@ -140,7 +168,7 @@ export function getSessionMeta(entries: SessionEntry[]): SessionMeta {
 
   const first = entries[0];
   const last = entries[entries.length - 1];
-  const userMessages = entries.filter((e) => e.type === 'user');
+  const userMessages = entries.filter((e) => (e.type ?? e.role) === 'user');
   const firstUserMsg = userMessages[0]?.message?.content;
 
   return {
@@ -150,32 +178,133 @@ export function getSessionMeta(entries: SessionEntry[]): SessionMeta {
     branch: first?.gitBranch ?? 'unknown',
     messageCount: entries.length,
     userMessageCount: userMessages.length,
-    preview: typeof firstUserMsg === 'string' ? firstUserMsg.substring(0, 200) : 'N/A',
+    preview:
+      typeof firstUserMsg === 'string'
+        ? firstUserMsg.substring(0, 200)
+        : Array.isArray(firstUserMsg)
+          ? (
+              (firstUserMsg as unknown[])
+                .filter(
+                  (p: unknown) =>
+                    typeof p === 'string' ||
+                    (typeof p === 'object' &&
+                      p !== null &&
+                      'type' in p &&
+                      (p as { type: string }).type === 'text'),
+                )
+                .map((p: unknown) => (typeof p === 'string' ? p : (p as { text?: string }).text))
+                .filter(Boolean)
+                .join('\n') || 'N/A'
+            ).substring(0, 200)
+          : 'N/A',
   };
 }
 
 // ── Discovery ───────────────────────────────────────────────────────────────
 
 /**
- * Discover all project directories under ~/.claude/projects/
+ * Discover all session directories under the primary session root and any extra session roots.
+ *
+ * Extra roots are scanned as follows:
+ * - Cursor-style roots (containing `<workspace>/agent-transcripts/`):
+ *   Each workspace with an `agent-transcripts/` subdirectory becomes a project
+ *   named `cursor-<workspace>`.
+ * - Generic roots with subdirectories containing JSONL files:
+ *   Each subdirectory becomes a project named `ext-<dirname>`.
+ * - Flat roots containing JSONL files directly:
+ *   The root itself becomes a single project named `ext-<basename>`.
  */
 export function getProjectDirs(): Array<{ name: string; path: string }> {
-  const { projectsDir } = getConfig();
-  if (!fs.existsSync(projectsDir)) return [];
+  const { sessionsDir, extraSessionRoots } = getConfig();
+  const results: Array<{ name: string; path: string }> = [];
 
-  return fs
-    .readdirSync(projectsDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => ({
-      name: d.name,
-      path: path.join(projectsDir, d.name),
-    }));
+  // Primary session root
+  if (fs.existsSync(sessionsDir)) {
+    for (const d of fs.readdirSync(sessionsDir, { withFileTypes: true })) {
+      if (d.isDirectory()) {
+        results.push({ name: d.name, path: path.join(sessionsDir, d.name) });
+      }
+    }
+  }
+
+  // Extra session roots
+  for (const root of extraSessionRoots) {
+    if (!fs.existsSync(root)) continue;
+
+    let subdirs: fs.Dirent[];
+    try {
+      subdirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
+    } catch {
+      continue;
+    }
+
+    let addedAny = false;
+    for (const d of subdirs) {
+      const transcriptsDir = path.join(root, d.name, 'agent-transcripts');
+      if (fs.existsSync(transcriptsDir)) {
+        results.push({
+          name: `cursor-${d.name}`,
+          path: transcriptsDir,
+        });
+        addedAny = true;
+        continue;
+      }
+
+      // Generic subdirectory: check if it contains JSONL files directly
+      const subPath = path.join(root, d.name);
+      try {
+        const hasJsonl = fs.readdirSync(subPath).some((f) => f.endsWith('.jsonl'));
+        if (hasJsonl) {
+          results.push({
+            name: `ext-${d.name}`,
+            path: subPath,
+          });
+          addedAny = true;
+        }
+      } catch {
+        // skip unreadable dirs
+      }
+    }
+
+    // Flat root: if no subdirectories matched, check if the root itself has JSONL files
+    if (!addedAny) {
+      try {
+        const hasJsonl = fs.readdirSync(root).some((f) => f.endsWith('.jsonl'));
+        if (hasJsonl) {
+          results.push({
+            name: `ext-${path.basename(root)}`,
+            path: root,
+          });
+        }
+      } catch {
+        // skip
+      }
+    }
+  }
+
+  // Discover sessions from additional adapters (OpenCode, Cline, Continue.dev, Aider)
+  for (const adapter of getAvailableAdapters()) {
+    try {
+      results.push(...adapter.discoverProjects());
+    } catch {
+      // skip failed adapters silently
+    }
+  }
+
+  return results;
 }
 
 /**
  * List all .jsonl session files in a given project directory.
  */
 export function getSessionFiles(projectPath: string): Array<{ id: string; file: string }> {
+  // Dispatch virtual descriptors to the appropriate adapter
+  for (const adapter of getAvailableAdapters()) {
+    if (projectPath.startsWith(`${adapter.prefix}://`)) {
+      return adapter.listSessions(projectPath);
+    }
+  }
+
   if (!fs.existsSync(projectPath)) return [];
 
   return fs

@@ -24,7 +24,7 @@
 - **Git** (for knowledge base sync)
 - A knowledge base repo (or create one):
   ```bash
-  mkdir -p ~/claude-memory && cd ~/claude-memory && git init
+  mkdir -p ~/agent-knowledge && cd ~/agent-knowledge && git init
   mkdir projects people decisions workflows notes
   ```
 
@@ -45,8 +45,8 @@ npm run test:watch
 ### Environment
 
 ```bash
-export KNOWLEDGE_MEMORY_DIR=~/claude-memory
-export CLAUDE_DIR=~/.claude
+export KNOWLEDGE_MEMORY_DIR=~/agent-knowledge
+export KNOWLEDGE_DATA_DIR=~/.claude       # primary session dir (other tools auto-detected)
 export KNOWLEDGE_PORT=3423
 ```
 
@@ -64,10 +64,16 @@ agent-knowledge/
       search.ts           TF-IDF search over knowledge entries with regex fallback
       git.ts              git pull/push/sync with timeouts
     sessions/
-      parser.ts           JSONL parsing with mtime-based cache
+      parser.ts           Multi-format session parsing with mtime-based cache
       search.ts           TF-IDF ranked search with 60s global index cache
       scopes.ts           6 search scopes (errors, plans, configs, tools, files, decisions)
       summary.ts          Session summaries, topic extraction, file path detection
+      adapters/
+        index.ts          SessionAdapter interface, registry, auto-init
+        opencode.ts       OpenCode adapter (SQLite)
+        cline.ts          Cline adapter (JSON)
+        continue.ts       Continue.dev adapter (JSON)
+        aider.ts          Aider adapter (Markdown/JSONL)
     search/
       tfidf.ts            TF-IDF scoring engine (tokenizer, stopwords, index)
       fuzzy.ts            Levenshtein distance, sliding window fuzzy matching
@@ -112,6 +118,71 @@ Tests use **vitest** with `fs.mkdtempSync` for temp directories in filesystem te
 - TF-IDF: tokenization, stopwords, ranking correctness, edge cases
 - Fuzzy: Levenshtein distance, threshold filtering, sliding window
 - Sessions: JSONL parsing, malformed line handling, message extraction
+- Session adapters: `isAvailable()` detection, `parseSession()` output normalization, graceful handling of missing/corrupt data
+
+## Adding a Session Adapter
+
+agent-knowledge uses a pluggable adapter system to read sessions from different AI coding tools. To add support for a new tool:
+
+### 1. Create the adapter file
+
+Create `src/sessions/adapters/<tool>.ts` implementing the `SessionAdapter` interface:
+
+```typescript
+import type { SessionEntry } from '../parser.js';
+import type { SessionAdapter } from './index.js';
+
+export const myToolAdapter: SessionAdapter = {
+  prefix: 'mytool', // Unique prefix for virtual descriptors
+  name: 'My Tool', // Human-readable name
+
+  isAvailable(): boolean {
+    // Return true if this tool is installed on the current machine.
+    // Check for the existence of data files/directories.
+    return existsSync('/path/to/mytool/data');
+  },
+
+  discoverProjects(): Array<{ name: string; path: string }> {
+    // Return a list of projects/groups found for this tool.
+    // Use `mytool://` prefixed paths as virtual descriptors.
+    return [{ name: 'mytool', path: 'mytool://all' }];
+  },
+
+  listSessions(projectDescriptor: string): Array<{ id: string; file: string }> {
+    // List individual sessions within a project.
+    // Return virtual descriptors that parseSession() can handle.
+    return [{ id: 'session-1', file: 'mytool://session:session-1' }];
+  },
+
+  parseSession(descriptor: string): SessionEntry[] {
+    // Parse a session into normalized SessionEntry[] objects.
+    // Each entry needs at minimum: type ('user'|'assistant'), message.role, message.content
+    return [{ type: 'user', message: { role: 'user', content: 'Hello' } }];
+  },
+};
+```
+
+### 2. Register the adapter
+
+Add a dynamic import to `src/sessions/adapters/index.ts` in the `initAdapters()` function:
+
+```typescript
+import('./mytool.js').then((m) => registerAdapter(m.myToolAdapter)).catch(() => {});
+```
+
+### 3. Key guidelines
+
+- **Auto-detection only**: `isAvailable()` should check for the tool's data files on disk. No user configuration required.
+- **Virtual descriptors**: Use `<prefix>://` URIs so the parser can dispatch to the correct adapter.
+- **Graceful failure**: All methods should catch errors and return empty arrays rather than throwing.
+- **Read-only access**: Never modify the source tool's data files. Use `{ readonly: true }` for database connections.
+- **Platform-aware paths**: Handle Windows, macOS, and Linux path differences (see `cline.ts` for an example).
+
+### 4. Update documentation
+
+- Add the tool to the "Supported Tools" table in `README.md`
+- Add the tool to the "Supported Session Sources" list in `CLAUDE.md`
+- Add a changelog entry in `CHANGELOG.md`
 
 ## Pull Requests
 

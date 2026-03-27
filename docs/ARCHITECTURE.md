@@ -4,7 +4,7 @@
 
 ```mermaid
 graph TB
-    Claude[Claude Code] -->|MCP stdio| Server[server.ts]
+    Agent[Agent Session] -->|MCP stdio| Server[server.ts]
     Server --> Knowledge[Knowledge Module]
     Server --> Session[Session Module]
 
@@ -12,15 +12,20 @@ graph TB
     Knowledge --> KSearch[search.ts — TF-IDF]
     Knowledge --> Git[git.ts — Sync]
 
-    Store --> Vault[(~/claude-memory)]
+    Store --> Vault[(~/agent-knowledge)]
     Git --> Remote[(Git Remote)]
 
-    Session --> Parser[parser.ts — JSONL + Cache]
+    Session --> Parser[parser.ts — Multi-format + Cache]
+    Session --> Adapters[adapters/ — Auto-discovery]
     Session --> SSearch[search.ts — TF-IDF Index]
     Session --> Scopes[scopes.ts — 6 Filters]
     Session --> Summary[summary.ts]
 
-    Parser --> Transcripts[(~/.claude/projects/*.jsonl)]
+    Parser --> Transcripts[(Claude Code / Cursor<br/>JSONL)]
+    Adapters --> OpenCode[(OpenCode<br/>SQLite)]
+    Adapters --> Cline[(Cline<br/>JSON)]
+    Adapters --> ContinueDev[(Continue.dev<br/>JSON)]
+    Adapters --> Aider[(Aider<br/>MD / JSONL)]
 
     Server --> Dashboard[dashboard.ts — :3423]
     Dashboard --> HTTP[REST API]
@@ -43,10 +48,16 @@ src/
     search.ts           TF-IDF search over knowledge entries
     git.ts              git pull/push/sync with execSync + timeouts
   sessions/
-    parser.ts           JSONL parsing with mtime-based file cache
+    parser.ts           Multi-format parsing with mtime cache + adapter dispatch
     search.ts           TF-IDF ranked search with 60s global index cache
     scopes.ts           6 search scopes, post-filters cached index results
     summary.ts          Topic extraction, tool/file detection
+    adapters/
+      index.ts          SessionAdapter interface, adapter registry, initAdapters()
+      opencode.ts       OpenCode adapter — reads SQLite database (better-sqlite3)
+      cline.ts          Cline adapter — reads VS Code globalStorage JSON tasks
+      continue.ts       Continue.dev adapter — reads JSON session files
+      aider.ts          Aider adapter — parses markdown chat + JSONL LLM history
   search/
     tfidf.ts            TF-IDF scoring engine (tokenizer, stopwords, index)
     fuzzy.ts            Levenshtein distance, sliding window matching
@@ -83,12 +94,52 @@ Builds a TF-IDF index from all knowledge entries, searches with ranking, falls b
 
 ## Session Module
 
-### parser.ts — Mtime Cache
+### Multi-Source Architecture
 
-Before parsing a JSONL file, checks `fs.statSync` for mtime. If unchanged since last parse, returns cached result. This avoids re-parsing large transcript files on every search.
+Sessions are read from multiple AI coding tools through two mechanisms:
+
+1. **Direct parsing** -- Claude Code and Cursor sessions use JSONL files read directly by `parser.ts`. Claude Code sessions come from the primary data directory (`$KNOWLEDGE_DATA_DIR/projects/`). Cursor sessions are auto-discovered from `~/.cursor/projects/*/agent-transcripts/`.
+
+2. **Adapter dispatch** -- Other tools (OpenCode, Cline, Continue.dev, Aider) use the pluggable adapter system in `adapters/`. When `parseSessionFile()` receives a virtual descriptor (e.g. `opencode://session:abc`), it dispatches to the matching adapter.
 
 ```
 parseSessionFile(path)
+  → for each registered adapter:
+      if path starts with `<adapter.prefix>://` → adapter.parseSession(path)
+  → else: standard JSONL parsing with mtime cache
+```
+
+### Session Adapters
+
+The adapter system (`src/sessions/adapters/`) provides a uniform interface for reading sessions from different tools:
+
+```typescript
+interface SessionAdapter {
+  prefix: string;                    // Virtual descriptor prefix (e.g. "opencode")
+  name: string;                      // Human-readable name
+  isAvailable(): boolean;            // Is the tool installed?
+  discoverProjects(): Array<{...}>;  // Find projects/groups
+  listSessions(desc: string): Array<{...}>;  // List sessions in a project
+  parseSession(desc: string): SessionEntry[];  // Parse into normalized entries
+}
+```
+
+Adapters are registered at startup via `initAdapters()`, which dynamically imports each adapter module. `getAvailableAdapters()` returns only adapters whose `isAvailable()` returns true (the tool is installed).
+
+| Adapter      | Storage                                         | Detection                                                                |
+| ------------ | ----------------------------------------------- | ------------------------------------------------------------------------ |
+| OpenCode     | SQLite (`opencode.db`)                          | Checks `$OPENCODE_DATA_DIR` or `~/.local/share/opencode/`                |
+| Cline        | JSON files in VS Code globalStorage             | Platform-aware path to `saoudrizwan.claude-dev/tasks/`                   |
+| Continue.dev | JSON files in `~/.continue/sessions/`           | Checks directory existence                                               |
+| Aider        | `.aider.chat.history.md` + `.aider.llm.history` | Scans `~/projects`, `~/code`, `~/dev`, `~/src`, `~/repos`, `~/workspace` |
+
+### parser.ts — Mtime Cache
+
+For JSONL-based sessions (Claude Code, Cursor), the parser checks `fs.statSync` for mtime before parsing. If unchanged since last parse, returns cached result. This avoids re-parsing large transcript files on every search.
+
+```
+parseSessionFile(path)
+  → if virtual descriptor → dispatch to adapter
   → statSync(path).mtimeMs
   → if mtime matches cache → return cached entries
   → else parse JSONL lines → cache with mtime → return
@@ -200,17 +251,19 @@ Search Request
 
 ```mermaid
 sequenceDiagram
-    participant C as Claude Code
+    participant C as Agent Session
     participant S as MCP Server
     participant I as TF-IDF Index
     participant P as Parser Cache
+    participant A as Session Adapters
     participant F as File System
 
     C->>S: knowledge_search({ query })
     S->>I: search(query)
     alt Index expired
-        I->>F: List .jsonl files
-        loop Each file
+        I->>F: List JSONL files (Claude Code, Cursor)
+        I->>A: Discover sessions (OpenCode, Cline, Continue.dev, Aider)
+        loop Each JSONL file
             alt Mtime changed
                 I->>P: parse(file)
                 P->>F: Read JSONL
@@ -219,6 +272,10 @@ sequenceDiagram
                 I->>P: getCached(file)
                 P-->>I: Cached entries
             end
+        end
+        loop Each adapter session
+            I->>A: parseSession(descriptor)
+            A-->>I: Normalized entries
         end
         I->>I: Rebuild index
     end
@@ -230,7 +287,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant C as Claude Code
+    participant C as Agent Session
     participant S as MCP Server
     participant G as Git
     participant F as File System

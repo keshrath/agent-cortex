@@ -15,7 +15,7 @@ import { getConfig } from '../types.js';
 
 function getCursorPath(): string {
   const config = getConfig();
-  return join(config.claudeDir, '.knowledge-distill-cursor');
+  return join(config.dataDir, '.knowledge-distill-cursor');
 }
 
 function getLastDistillTime(): string | null {
@@ -146,7 +146,7 @@ function isSafeContent(text: string): boolean {
 // ── Project name normalization ──────────────────────────────────────────────
 
 /**
- * Normalize a Claude Code project directory name to a clean, readable
+ * Normalize a project directory name to a clean, readable
  * project name suitable for the knowledge base.
  *
  * Input examples:

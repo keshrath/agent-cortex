@@ -1,6 +1,6 @@
 # Setup Guide
 
-Detailed instructions for installing, configuring, and integrating agent-knowledge with any MCP client.
+Detailed instructions for installing, configuring, and integrating agent-knowledge with any MCP-compatible AI agent or coding assistant.
 
 ## Table of Contents
 
@@ -20,6 +20,7 @@ Detailed instructions for installing, configuring, and integrating agent-knowled
 - [Environment Variables](#environment-variables)
 - [Dashboard](#dashboard)
 - [Multi-Machine Sync](#multi-machine-sync)
+- [Session Sources](#session-sources)
 - [Session Auto-Distillation](#session-auto-distillation)
 - [Troubleshooting](#troubleshooting)
 
@@ -64,7 +65,7 @@ agent-knowledge works with any MCP client (stdio) or HTTP client (REST API). Pic
 
 ```bash
 claude mcp add agent-knowledge -s user \
-  -e KNOWLEDGE_MEMORY_DIR="$HOME/claude-memory" \
+  -e KNOWLEDGE_MEMORY_DIR="$HOME/agent-knowledge" \
   -- node /path/to/agent-knowledge/dist/index.js
 ```
 
@@ -99,7 +100,7 @@ claude mcp list
       "type": "local",
       "command": ["node", "/absolute/path/to/agent-knowledge/dist/index.js"],
       "environment": {
-        "KNOWLEDGE_MEMORY_DIR": "/home/you/claude-memory",
+        "KNOWLEDGE_MEMORY_DIR": "/home/you/agent-knowledge",
         "KNOWLEDGE_PORT": "3423"
       }
     }
@@ -118,7 +119,7 @@ claude mcp list
       "command": "node",
       "args": ["/absolute/path/to/agent-knowledge/dist/index.js"],
       "env": {
-        "KNOWLEDGE_MEMORY_DIR": "/home/you/claude-memory",
+        "KNOWLEDGE_MEMORY_DIR": "/home/you/agent-knowledge",
         "KNOWLEDGE_PORT": "3423"
       }
     }
@@ -137,7 +138,7 @@ claude mcp list
       "command": "node",
       "args": ["/absolute/path/to/agent-knowledge/dist/index.js"],
       "env": {
-        "KNOWLEDGE_MEMORY_DIR": "/home/you/claude-memory",
+        "KNOWLEDGE_MEMORY_DIR": "/home/you/agent-knowledge",
         "KNOWLEDGE_PORT": "3423"
       }
     }
@@ -255,10 +256,10 @@ The knowledge base is a git repository with categorized markdown files.
 
 ```bash
 # Clone existing
-git clone https://your-git-host/claude-memory.git ~/claude-memory
+git clone https://your-git-host/agent-knowledge.git ~/agent-knowledge
 
 # Or create new
-mkdir -p ~/claude-memory && cd ~/claude-memory && git init
+mkdir -p ~/agent-knowledge && cd ~/agent-knowledge && git init
 mkdir projects people decisions workflows notes
 git add . && git commit -m "Initialize knowledge base"
 git remote add origin <your-remote-url>
@@ -268,7 +269,7 @@ git push -u origin main
 ### Directory structure
 
 ```
-~/claude-memory/
+~/agent-knowledge/
   projects/       # Project context, architecture, tech stacks
   people/         # Team members, contacts, preferences
   decisions/      # Architecture decisions, trade-offs, rationale
@@ -294,33 +295,34 @@ Architecture notes, deployment info, etc.
 
 ## Environment Variables
 
-| Variable                                         | Default           | Description                                        |
-| ------------------------------------------------ | ----------------- | -------------------------------------------------- |
-| `KNOWLEDGE_MEMORY_DIR`                           | `~/claude-memory` | Path to git-synced knowledge base                  |
-| `CLAUDE_MEMORY_DIR`                              | `~/claude-memory` | Alias (backwards compat)                           |
-| `CLAUDE_DIR`                                     | `~/.claude`       | Claude Code data directory                         |
-| `KNOWLEDGE_PORT`                                 | `3423`            | Dashboard HTTP/WebSocket port                      |
-| `KNOWLEDGE_EMBEDDING_PROVIDER`                   | `local`           | Embedding provider (local, openai, claude, gemini) |
-| `KNOWLEDGE_EMBEDDING_ALPHA`                      | `0.5`             | Blend weight for semantic vs TF-IDF search (0-1)   |
-| `KNOWLEDGE_EMBEDDING_IDLE_TIMEOUT`               | —                 | Idle timeout for embedding worker (ms)             |
-| `KNOWLEDGE_EMBEDDING_THREADS`                    | —                 | Number of ONNX threads for local embeddings        |
-| `KNOWLEDGE_EMBEDDING_MODEL`                      | —                 | Model name for embedding provider                  |
-| `KNOWLEDGE_GIT_URL`                              | —                 | Remote git URL for knowledge base sync             |
-| `KNOWLEDGE_AUTO_DISTILL`                         | —                 | Enable auto-distillation of sessions (true/false)  |
-| `KNOWLEDGE_OPENAI_API_KEY` / `OPENAI_API_KEY`    | —                 | API key for OpenAI embeddings                      |
-| `KNOWLEDGE_CLAUDE_API_KEY` / `ANTHROPIC_API_KEY` | —                 | API key for Claude/Voyage embeddings               |
-| `KNOWLEDGE_GEMINI_API_KEY` / `GEMINI_API_KEY`    | —                 | API key for Gemini embeddings                      |
+| Variable                                            | Default             | Description                                                    |
+| --------------------------------------------------- | ------------------- | -------------------------------------------------------------- |
+| `KNOWLEDGE_MEMORY_DIR`                              | `~/agent-knowledge` | Path to git-synced knowledge base                              |
+| `KNOWLEDGE_DATA_DIR`                                | `~/.claude`         | Primary session data directory (Claude Code JSONL)             |
+| `EXTRA_SESSION_ROOTS`                               | --                  | Additional session directories, comma-separated                |
+| `OPENCODE_DATA_DIR`                                 | (platform default)  | Override OpenCode data dir (default `~/.local/share/opencode`) |
+| `KNOWLEDGE_PORT`                                    | `3423`              | Dashboard HTTP/WebSocket port                                  |
+| `KNOWLEDGE_EMBEDDING_PROVIDER`                      | `local`             | Embedding provider (local, openai, claude, gemini)             |
+| `KNOWLEDGE_EMBEDDING_ALPHA`                         | `0.5`               | Blend weight for semantic vs TF-IDF search (0-1)               |
+| `KNOWLEDGE_EMBEDDING_IDLE_TIMEOUT`                  | —                   | Idle timeout for embedding worker (ms)                         |
+| `KNOWLEDGE_EMBEDDING_THREADS`                       | —                   | Number of ONNX threads for local embeddings                    |
+| `KNOWLEDGE_EMBEDDING_MODEL`                         | —                   | Model name for embedding provider                              |
+| `KNOWLEDGE_GIT_URL`                                 | —                   | Remote git URL for knowledge base sync                         |
+| `KNOWLEDGE_AUTO_DISTILL`                            | —                   | Enable auto-distillation of sessions (true/false)              |
+| `KNOWLEDGE_OPENAI_API_KEY` / `OPENAI_API_KEY`       | —                   | API key for OpenAI embeddings                                  |
+| `KNOWLEDGE_ANTHROPIC_API_KEY` / `ANTHROPIC_API_KEY` | —                   | API key for Claude/Voyage embeddings                           |
+| `KNOWLEDGE_GEMINI_API_KEY` / `GEMINI_API_KEY`       | —                   | API key for Gemini embeddings                                  |
 
 Set in your shell profile or pass via MCP config:
 
 ```bash
-export KNOWLEDGE_MEMORY_DIR="$HOME/claude-memory"
+export KNOWLEDGE_MEMORY_DIR="$HOME/agent-knowledge"
 ```
 
 On Windows (PowerShell):
 
 ```powershell
-$env:KNOWLEDGE_MEMORY_DIR = "$env:USERPROFILE\claude-memory"
+$env:KNOWLEDGE_MEMORY_DIR = "$env:USERPROFILE\agent-knowledge"
 ```
 
 ---
@@ -346,14 +348,37 @@ Live reload: edit files in `src/ui/` and the browser refreshes automatically.
 Ensure git credentials are configured (SSH key or credential helper):
 
 ```bash
-cd ~/claude-memory && git pull && git push  # Should work without prompts
+cd ~/agent-knowledge && git pull && git push  # Should work without prompts
 ```
 
 ---
 
+## Session Sources
+
+agent-knowledge auto-discovers sessions from all major AI coding assistants. If a tool is installed on your machine, its sessions appear automatically in search results and the dashboard Sessions tab.
+
+| Tool             | Format         | Auto-detected path                                              | Override              |
+| ---------------- | -------------- | --------------------------------------------------------------- | --------------------- |
+| **Claude Code**  | JSONL          | `$KNOWLEDGE_DATA_DIR/projects/`                                 | `KNOWLEDGE_DATA_DIR`  |
+| **Cursor**       | JSONL          | `~/.cursor/projects/*/agent-transcripts/`                       | `EXTRA_SESSION_ROOTS` |
+| **OpenCode**     | SQLite         | `~/.local/share/opencode/opencode.db`                           | `OPENCODE_DATA_DIR`   |
+| **Cline**        | JSON           | VS Code globalStorage `saoudrizwan.claude-dev/tasks/`           | --                    |
+| **Continue.dev** | JSON           | `~/.continue/sessions/`                                         | --                    |
+| **Aider**        | Markdown/JSONL | `.aider.chat.history.md` / `.aider.llm.history` in project dirs | --                    |
+
+### Adding extra session directories
+
+Use the `EXTRA_SESSION_ROOTS` environment variable to add session directories that are not auto-detected:
+
+```bash
+export EXTRA_SESSION_ROOTS="/path/to/custom/sessions,/another/path"
+```
+
+Each path is scanned for JSONL files or Cursor-style `agent-transcripts/` subdirectories.
+
 ## Session Auto-Distillation
 
-agent-knowledge can auto-distill session transcripts into knowledge entries. This currently reads Claude Code session files from `~/.claude/projects/`. Other clients store transcripts differently — auto-distillation only works with Claude Code sessions for now.
+agent-knowledge can auto-distill session transcripts into knowledge entries. Auto-distillation reads from all discovered session sources and works with any tool whose sessions are available through the adapter system.
 
 To manually save knowledge from any client, use `knowledge_write`.
 
@@ -377,7 +402,7 @@ export KNOWLEDGE_PORT=3424
 Verify credentials work manually:
 
 ```bash
-cd ~/claude-memory && git push
+cd ~/agent-knowledge && git push
 ```
 
 Set up SSH keys or a credential helper if prompted.
@@ -390,18 +415,39 @@ Set up SSH keys or a credential helper if prompted.
 
 ### No session results
 
-Verify session transcripts exist:
+Verify session data exists for at least one supported tool:
 
 ```bash
-ls ~/.claude/projects/  # Should contain project directories with .jsonl files
+# Claude Code (JSONL)
+ls ~/.claude/projects/
+
+# Cursor (JSONL)
+ls ~/.cursor/projects/*/agent-transcripts/
+
+# OpenCode (SQLite)
+ls ~/.local/share/opencode/opencode.db
+
+# Cline (JSON) — path varies by platform
+# Windows: %APPDATA%/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/
+# macOS:   ~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/
+# Linux:   ~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/
+
+# Continue.dev (JSON)
+ls ~/.continue/sessions/
+
+# Aider (Markdown) — check project directories
+ls ~/projects/*/.aider.chat.history.md
 ```
+
+If your session data is in a non-standard location, use `EXTRA_SESSION_ROOTS` to point to it.
 
 ## Client Comparison
 
-| Feature              | Claude Code | OpenCode      | Cursor       | Windsurf       |
-| -------------------- | ----------- | ------------- | ------------ | -------------- |
-| MCP stdio transport  | Yes         | Yes           | Yes          | Yes            |
-| Lifecycle hooks      | Yes (JSON)  | Yes (plugins) | No           | No             |
-| Session auto-distill | Yes         | No            | No           | No             |
-| System prompt file   | CLAUDE.md   | AGENTS.md     | .cursorrules | .windsurfrules |
-| REST API fallback    | Yes         | Yes           | Yes          | Yes            |
+| Feature              | Claude Code | Cursor       | OpenCode      | Cline      | Continue.dev | Aider          | Windsurf       |
+| -------------------- | ----------- | ------------ | ------------- | ---------- | ------------ | -------------- | -------------- |
+| MCP stdio transport  | Yes         | Yes          | Yes           | Yes        | Yes          | --             | Yes            |
+| Session reading      | Yes (JSONL) | Yes (JSONL)  | Yes (SQLite)  | Yes (JSON) | Yes (JSON)   | Yes (MD/JSONL) | --             |
+| Lifecycle hooks      | Yes (JSON)  | No           | Yes (plugins) | No         | No           | --             | No             |
+| Session auto-distill | Yes         | Yes          | Yes           | Yes        | Yes          | Yes            | --             |
+| System prompt file   | CLAUDE.md   | .cursorrules | AGENTS.md     | --         | --           | --             | .windsurfrules |
+| REST API fallback    | Yes         | Yes          | Yes           | Yes        | Yes          | Yes            | Yes            |

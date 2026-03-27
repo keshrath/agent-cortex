@@ -40,12 +40,12 @@ async function createProvider(cfg: EmbeddingConfig): Promise<EmbeddingProvider |
       return new OpenAIEmbeddingProvider(cfg.openaiApiKey, cfg.modelOverride);
     }
     case 'claude': {
-      if (!cfg.claudeApiKey) {
-        console.error('[knowledge] KNOWLEDGE_CLAUDE_API_KEY not set');
+      if (!cfg.anthropicApiKey) {
+        console.error('[knowledge] KNOWLEDGE_ANTHROPIC_API_KEY not set');
         return null;
       }
-      const { ClaudeEmbeddingProvider } = await import('./claude.js');
-      return new ClaudeEmbeddingProvider(cfg.claudeApiKey, cfg.modelOverride);
+      const { AnthropicEmbeddingProvider } = await import('./anthropic.js');
+      return new AnthropicEmbeddingProvider(cfg.anthropicApiKey, cfg.modelOverride);
     }
     case 'gemini': {
       if (!cfg.geminiApiKey) {

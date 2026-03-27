@@ -6,20 +6,21 @@ import { execSync } from 'child_process';
 
 vi.mock('../src/types.js', () => {
   let _memoryDir = '';
-  let _claudeDir = '';
+  let _dataDir = '';
   return {
     getConfig: () => ({
       memoryDir: _memoryDir,
-      claudeDir: _claudeDir,
-      projectsDir: path.join(_claudeDir, 'projects'),
+      dataDir: _dataDir,
+      sessionsDir: path.join(_dataDir, 'projects'),
       embeddingProvider: 'local',
       embeddingAlpha: 0.3,
       gitUrl: undefined,
       autoDistill: true,
+      extraSessionRoots: [],
     }),
-    _setDirs: (memoryDir: string, claudeDir: string) => {
+    _setDirs: (memoryDir: string, dataDir: string) => {
       _memoryDir = memoryDir;
-      _claudeDir = claudeDir;
+      _dataDir = dataDir;
     },
     getVersion: () => '1.0.0',
   };
@@ -41,12 +42,12 @@ function makeGitRepo(dir: string): void {
 }
 
 function makeSession(
-  claudeDir: string,
+  dataDir: string,
   projectName: string,
   sessionId: string,
   messages: Array<{ role: string; content: string }>,
 ): void {
-  const projDir = path.join(claudeDir, 'projects', projectName);
+  const projDir = path.join(dataDir, 'projects', projectName);
   fs.mkdirSync(projDir, { recursive: true });
 
   const lines = messages.map((m, i) => {
@@ -167,18 +168,18 @@ describe('scrubContent', () => {
 
 describe('distillSessions', () => {
   let memoryDir: string;
-  let claudeDir: string;
+  let dataDir: string;
 
   beforeEach(() => {
     memoryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-distill-mem-'));
-    claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-distill-claude-'));
+    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-distill-claude-'));
     makeGitRepo(memoryDir);
-    (_setDirs as (m: string, c: string) => void)(memoryDir, claudeDir);
+    (_setDirs as (m: string, c: string) => void)(memoryDir, dataDir);
   });
 
   afterEach(() => {
     fs.rmSync(memoryDir, { recursive: true, force: true });
-    fs.rmSync(claudeDir, { recursive: true, force: true });
+    fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
   it('returns empty when no sessions exist', async () => {
@@ -189,7 +190,7 @@ describe('distillSessions', () => {
   });
 
   it('creates a new project entry from session data', async () => {
-    makeSession(claudeDir, 'my-test-project', 'session-001', [
+    makeSession(dataDir, 'my-test-project', 'session-001', [
       { role: 'user', content: 'Please implement the login feature with OAuth support' },
       { role: 'assistant', content: 'I will implement OAuth login...' },
     ]);
@@ -199,14 +200,14 @@ describe('distillSessions', () => {
   });
 
   it('respects the distill cursor to avoid reprocessing', async () => {
-    makeSession(claudeDir, 'cursor-test', 'session-003', [
+    makeSession(dataDir, 'cursor-test', 'session-003', [
       { role: 'user', content: 'First session with important work on the API layer' },
       { role: 'assistant', content: 'Working on it...' },
     ]);
 
     await distillSessions();
 
-    const cursorPath = path.join(claudeDir, '.knowledge-distill-cursor');
+    const cursorPath = path.join(dataDir, '.knowledge-distill-cursor');
     expect(fs.existsSync(cursorPath)).toBe(true);
     const cursor = fs.readFileSync(cursorPath, 'utf-8').trim();
     expect(cursor.length).toBeGreaterThan(0);
@@ -217,7 +218,7 @@ describe('distillSessions', () => {
   });
 
   it('does not write secrets to project entries', async () => {
-    makeSession(claudeDir, 'secret-test', 'session-004', [
+    makeSession(dataDir, 'secret-test', 'session-004', [
       {
         role: 'user',
         content:
