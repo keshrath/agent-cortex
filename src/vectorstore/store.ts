@@ -5,9 +5,12 @@
 
 import { join } from 'path';
 import { statSync } from 'fs';
+import { createRequire } from 'module';
 import { getConfig } from '../types.js';
 
 import type DatabaseConstructor from 'better-sqlite3';
+
+const require = createRequire(import.meta.url);
 type Database = InstanceType<typeof DatabaseConstructor>;
 
 /** A single embedding entry to store. */
@@ -80,7 +83,6 @@ export class VectorStore {
 
     try {
       if (!this.db) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const BetterSqlite3 = require('better-sqlite3') as typeof DatabaseConstructor;
         this.db = new BetterSqlite3(this.dbPath);
         this.db.pragma('journal_mode = WAL');
@@ -129,7 +131,6 @@ export class VectorStore {
     if (!this.db) return;
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sqliteVec = require('sqlite-vec') as { load: (db: Database) => void };
       sqliteVec.load(this.db);
       this.vecAvailable = true;
@@ -207,7 +208,6 @@ export class VectorStore {
       return val ? parseInt(val, 10) : null;
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const BetterSqlite3 = require('better-sqlite3') as typeof DatabaseConstructor;
       const tmpDb = new BetterSqlite3(this.dbPath, { readonly: true });
       try {
@@ -546,7 +546,6 @@ export class VectorStore {
       // If init fails (no dimensions yet), try opening DB directly for stats
       try {
         if (!this.db) {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const BetterSqlite3 = require('better-sqlite3') as typeof DatabaseConstructor;
           this.db = new BetterSqlite3(this.dbPath);
           this.db.pragma('journal_mode = WAL');
