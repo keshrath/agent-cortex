@@ -543,7 +543,17 @@ export class VectorStore {
     try {
       this.ensureInit();
     } catch {
-      return empty;
+      // If init fails (no dimensions yet), try opening DB directly for stats
+      try {
+        if (!this.db) {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const BetterSqlite3 = require('better-sqlite3') as typeof DatabaseConstructor;
+          this.db = new BetterSqlite3(this.dbPath);
+          this.db.pragma('journal_mode = WAL');
+        }
+      } catch {
+        return empty;
+      }
     }
     if (!this.db) return empty;
 

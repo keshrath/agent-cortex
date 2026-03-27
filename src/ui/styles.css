@@ -450,11 +450,21 @@ h1 {
 .search-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 16px;
-  flex-wrap: nowrap;
   gap: 8px;
-  overflow-x: auto;
+}
+.search-controls .filter-chips {
+  margin-bottom: 0;
+}
+.search-controls .filter-chips:first-child {
+  flex: 1;
+}
+.search-controls .mode-toggle {
+  flex: 0 0 auto;
+}
+.search-controls .filter-chips:last-child {
+  flex: 1;
+  justify-content: flex-end;
 }
 
 .mode-toggle {

@@ -1,3 +1,4 @@
+import fs from 'fs';
 import {
   getProjectDirs,
   getSessionFiles,
@@ -133,6 +134,87 @@ export function getSessionSummary(sessionId: string, project?: string): SessionS
  * List all sessions with metadata, sorted by startTime descending.
  * Optionally filter by project name (substring match).
  */
+// ── Session metadata cache (keyed by file path + mtime) ─────────────────────
+
+const metaCache = new Map<string, { mtime: number; meta: SessionMeta }>();
+
+function fastMeta(filePath: string): SessionMeta | null {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const stat = fs.fstatSync(fd);
+    if (stat.size === 0) {
+      fs.closeSync(fd);
+      return null;
+    }
+
+    const headBuf = Buffer.alloc(Math.min(4096, stat.size));
+    fs.readSync(fd, headBuf, 0, headBuf.length, 0);
+    const headStr = headBuf.toString('utf-8');
+    const firstLine = headStr.split('\n').find((l) => l.trim());
+    if (!firstLine) {
+      fs.closeSync(fd);
+      return null;
+    }
+
+    let first;
+    try {
+      first = JSON.parse(firstLine);
+    } catch {
+      fs.closeSync(fd);
+      return null;
+    }
+
+    let last = first;
+    if (stat.size > 4096) {
+      const tailSize = Math.min(4096, stat.size);
+      const tailBuf = Buffer.alloc(tailSize);
+      fs.readSync(fd, tailBuf, 0, tailSize, stat.size - tailSize);
+      const tailStr = tailBuf.toString('utf-8');
+      const tailLines = tailStr.split('\n').filter((l) => l.trim());
+      if (tailLines.length > 0) {
+        try {
+          last = JSON.parse(tailLines[tailLines.length - 1]);
+        } catch {
+          /* keep first as last */
+        }
+      }
+    }
+    fs.closeSync(fd);
+
+    const preview = first.message?.content
+      ? (typeof first.message.content === 'string' ? first.message.content : '').substring(0, 200)
+      : '';
+
+    return {
+      startTime: first.timestamp || 'unknown',
+      endTime: last.timestamp || first.timestamp || 'unknown',
+      cwd: first.cwd || '',
+      branch: first.gitBranch || '',
+      messageCount: Math.max(1, Math.round(stat.size / 500)),
+      userMessageCount: 0,
+      preview,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getCachedMeta(sess: { id: string; file: string }): SessionMeta | null {
+  try {
+    const stat = fs.statSync(sess.file);
+    const mtime = stat.mtimeMs;
+    const cached = metaCache.get(sess.file);
+    if (cached && cached.mtime === mtime) return cached.meta;
+
+    const meta = fastMeta(sess.file);
+    if (!meta) return null;
+    metaCache.set(sess.file, { mtime, meta });
+    return meta;
+  } catch {
+    return null;
+  }
+}
+
 export function listSessions(
   project?: string,
 ): Array<{ project: string; sessionId: string } & SessionMeta> {
@@ -145,18 +227,13 @@ export function listSessions(
   for (const proj of projects) {
     const sessions = getSessionFiles(proj.path);
     for (const sess of sessions) {
-      try {
-        const entries = parseSessionFile(sess.file);
-        if (entries.length === 0) continue;
-        const meta = getSessionMeta(entries);
-        results.push({
-          project: proj.name,
-          sessionId: sess.id,
-          ...meta,
-        });
-      } catch {
-        // skip broken files
-      }
+      const meta = getCachedMeta(sess);
+      if (!meta) continue;
+      results.push({
+        project: proj.name,
+        sessionId: sess.id,
+        ...meta,
+      });
     }
   }
 

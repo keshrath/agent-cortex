@@ -320,9 +320,10 @@
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
 
-  function switchTab(name) {
+  function switchTab(name, updateHash = true) {
     if (state.activeTab === name) return;
     state.activeTab = name;
+    if (updateHash) location.hash = '#' + name;
 
     Object.keys(el.tabs).forEach((k) => {
       const active = k === name;
@@ -889,6 +890,19 @@
     initTheme();
     bindEvents();
     wsConnect();
+
+    // Restore tab from URL hash
+    const hash = location.hash.replace('#', '');
+    const validTabs = Object.keys(el.tabs);
+    if (hash && validTabs.includes(hash)) {
+      switchTab(hash, false);
+    }
+
+    // Listen for back/forward navigation
+    window.addEventListener('hashchange', () => {
+      const h = location.hash.replace('#', '');
+      if (h && validTabs.includes(h)) switchTab(h, false);
+    });
 
     // Load initial data in parallel
     try {

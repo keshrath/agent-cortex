@@ -1,6 +1,6 @@
 {
   "name": "agent-knowledge",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Cross-session memory and recall for AI agents — git-synced knowledge base, hybrid semantic+TF-IDF search, auto-distillation with secrets scrubbing",
   "type": "module",
   "main": "dist/index.js",
@@ -75,7 +75,7 @@
     "vitest": "^3.0.0"
   },
   "optionalDependencies": {
-    "@huggingface/transformers": "^3.0.0"
+    "@huggingface/transformers": "3.8.1"
   },
   "lint-staged": {
     "*.{ts,js}": [

@@ -4,7 +4,6 @@ const DEFAULT_MODEL = 'Xenova/all-MiniLM-L6-v2';
 const DEFAULT_DIMENSIONS = 384;
 const DEFAULT_BATCH_SIZE = 32;
 
-/** Cached pipeline instance — only loaded once. */
 let _pipeline: ReturnType<typeof createPipeline> | null = null;
 
 type PipelineFn = (
@@ -25,10 +24,6 @@ async function createPipeline(model: string): Promise<PipelineFn | null> {
   }
 }
 
-/**
- * Local embedding provider using @huggingface/transformers.
- * Downloads the model silently on first use and caches the pipeline as a singleton.
- */
 export class LocalEmbeddingProvider implements EmbeddingProvider {
   readonly name = 'local';
   readonly dimensions: number;
@@ -41,7 +36,6 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     this.batchSize = batchSize ?? DEFAULT_BATCH_SIZE;
   }
 
-  /** Embed one or more texts, batching internally if needed. */
   async embed(texts: string[]): Promise<number[][]> {
     const pipe = await this.getPipeline();
     if (!pipe) return texts.map(() => []);
@@ -64,13 +58,11 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     return results;
   }
 
-  /** Embed a single text. */
   async embedOne(text: string): Promise<number[]> {
     const results = await this.embed([text]);
     return results[0] ?? [];
   }
 
-  /** Check if the provider is available. Attempts to load the model if not yet loaded. */
   async isAvailable(): Promise<boolean> {
     const pipe = await this.getPipeline();
     return pipe !== null;
