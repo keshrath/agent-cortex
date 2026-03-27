@@ -72,7 +72,12 @@ export function savePersistedConfig(updates: Partial<PersistedConfig>): Persiste
 
 export function getConfig(): KnowledgeConfig {
   const home = homedir();
-  const claudeDir = process.env.CLAUDE_DIR || join(home, '.claude');
+  // CLAUDE_DIR is optional — defaults to ~/.claude if it exists, otherwise
+  // falls back to the platform config dir so agent-knowledge works standalone
+  // (e.g. with Cursor, Windsurf, OpenCode) without requiring Claude Code.
+  const claudeDir =
+    process.env.CLAUDE_DIR ||
+    (existsSync(join(home, '.claude')) ? join(home, '.claude') : getConfigDir());
   const persisted = loadPersistedConfig();
 
   const memoryDir =

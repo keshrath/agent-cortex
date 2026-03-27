@@ -3,8 +3,8 @@
  * for semantic similarity search over knowledge and session embeddings.
  */
 
-import { join } from 'path';
-import { statSync } from 'fs';
+import { join, dirname } from 'path';
+import { statSync, mkdirSync } from 'fs';
 import { createRequire } from 'module';
 import { getConfig } from '../types.js';
 
@@ -84,6 +84,7 @@ export class VectorStore {
 
     try {
       if (!this.db) {
+        mkdirSync(dirname(this.dbPath), { recursive: true });
         const BetterSqlite3 = require('better-sqlite3') as typeof DatabaseConstructor;
         this.db = new BetterSqlite3(this.dbPath);
         this.db.pragma('journal_mode = WAL');
