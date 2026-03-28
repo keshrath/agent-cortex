@@ -158,26 +158,47 @@ function fastMeta(filePath: string): SessionMeta | null {
       return null;
     }
 
-    let first;
-    try {
-      first = JSON.parse(headLines[0]);
-    } catch {
-      fs.closeSync(fd);
-      return null;
+    // Find the first line with a top-level timestamp (skip metadata-only entries
+    // like file-history-snapshot which have no timestamp/cwd/gitBranch at top level)
+    let first: Record<string, unknown> | null = null;
+    for (const line of headLines) {
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.timestamp) {
+          first = parsed;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+    if (!first) {
+      // Fallback: use the very first parseable line even without timestamp
+      try {
+        first = JSON.parse(headLines[0]) as Record<string, unknown>;
+      } catch {
+        fs.closeSync(fd);
+        return null;
+      }
     }
 
-    let last = first;
+    let last: Record<string, unknown> = first!;
     if (stat.size > headSize) {
       const tailSize = Math.min(4096, stat.size);
       const tailBuf = Buffer.alloc(tailSize);
       fs.readSync(fd, tailBuf, 0, tailSize, stat.size - tailSize);
       const tailStr = tailBuf.toString('utf-8');
       const tailLines = tailStr.split('\n').filter((l) => l.trim());
-      if (tailLines.length > 0) {
+      // Find last line with a timestamp (skip trailing metadata entries)
+      for (let i = tailLines.length - 1; i >= 0; i--) {
         try {
-          last = JSON.parse(tailLines[tailLines.length - 1]);
+          const parsed = JSON.parse(tailLines[i]);
+          if (parsed.timestamp) {
+            last = parsed;
+            break;
+          }
         } catch {
-          /* keep first as last */
+          continue;
         }
       }
     }
@@ -209,10 +230,10 @@ function fastMeta(filePath: string): SessionMeta | null {
     }
 
     return {
-      startTime: first.timestamp || 'unknown',
-      endTime: last.timestamp || first.timestamp || 'unknown',
-      cwd: first.cwd || '',
-      branch: first.gitBranch || '',
+      startTime: (first.timestamp as string) || 'unknown',
+      endTime: (last.timestamp as string) || (first.timestamp as string) || 'unknown',
+      cwd: (first.cwd as string) || '',
+      branch: (first.gitBranch as string) || '',
       messageCount: Math.max(1, Math.round(stat.size / 500)),
       userMessageCount: 0,
       preview,
