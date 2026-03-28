@@ -969,6 +969,17 @@ h1 {
   font-size: 13px;
   line-height: 1.5;
   word-break: break-word;
+  overflow: hidden;
+}
+
+.chat-msg ol,
+.chat-msg ul {
+  margin: 4px 0;
+  padding-left: 1.4em;
+}
+
+.chat-msg p {
+  margin: 4px 0;
 }
 
 .chat-msg.user {
