@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node >= 20](https://img.shields.io/badge/Node-%3E%3D%2020-brightgreen.svg)](https://nodejs.org)
-[![Tests: 280 passing](https://img.shields.io/badge/Tests-280%20passing-brightgreen.svg)]()
+[![Tests: 280 passing](https://img.shields.io/badge/Tests-295%20passing-brightgreen.svg)]()
 [![MCP Tools: 12](https://img.shields.io/badge/MCP%20Tools-12-blueviolet.svg)]()
 
 **Cross-session memory and recall for AI coding assistants** -- works with Claude Code, Cursor, OpenCode, Cline, Continue.dev, and Aider out of the box. Git-synced knowledge base, hybrid semantic+TF-IDF search, auto-distillation with secrets scrubbing.
@@ -196,7 +196,7 @@ graph LR
 ## Testing
 
 ```bash
-npm test              # Run all 280 tests
+npm test              # Run all 295 tests
 npm run test:watch    # Watch mode
 npm run lint          # Type-check (tsc --noEmit)
 ```
