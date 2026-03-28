@@ -579,17 +579,23 @@
             })
           : '';
 
+        const title = preview
+          ? preview.length > 80
+            ? preview.slice(0, 80) + '…'
+            : preview
+          : id.slice(0, 8);
+
         return `<div class="session-card" data-session-id="${esc(id)}" tabindex="0" role="button">
         <div class="session-header">
-          <span class="session-project">${esc(project)}</span>
+          <span class="session-title">${esc(title)}</span>
           <span class="session-date">${dateStr || time || ''}</span>
         </div>
         <div class="session-meta">
+          <span class="session-meta-item"><span class="material-symbols-outlined">folder</span>${esc(project)}</span>
           ${branch ? `<span class="session-meta-item"><span class="material-symbols-outlined">alt_route</span>${esc(branch)}</span>` : ''}
           <span class="session-meta-item"><span class="material-symbols-outlined">chat</span>${count} messages</span>
           <span class="session-meta-item"><span class="material-symbols-outlined">tag</span>${esc(id.slice(0, 8))}</span>
         </div>
-        ${preview ? `<div class="session-preview">${esc(preview)}</div>` : ''}
       </div>`;
       })
       .join('');

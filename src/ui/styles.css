@@ -800,6 +800,17 @@ h1 {
   margin-bottom: 6px;
 }
 
+.session-card .session-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
 .session-card .session-project {
   font-size: 12px;
   font-weight: 600;

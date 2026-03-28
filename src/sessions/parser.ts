@@ -212,8 +212,35 @@ export function getSessionMeta(entries: SessionEntry[]): SessionMeta {
  * - Generic roots with subdirectories containing JSONL files:
  *   Each subdirectory becomes a project named `ext-<dirname>`.
  * - Flat roots containing JSONL files directly:
- *   The root itself becomes a single project named `ext-<basename>`.
+ *   The root itself becomes a single project named after the decoded directory.
  */
+
+/**
+ * Decode a Claude Code style project directory name into a human-readable name.
+ * e.g. "C--Users-john--my-project" → "my-project"
+ *      "C--home-john--repos--app" → "repos/app"
+ *      "C--Users-john" → "~"
+ * Falls back to the raw name if it doesn't match the expected pattern.
+ */
+function decodeProjectDirName(dirName: string): string {
+  const parts = dirName.split('--');
+  if (parts.length < 2) return dirName;
+
+  if (!/^[A-Z]$/i.test(parts[0])) return dirName;
+
+  const homeIdx = parts.findIndex((p) => /^(users|home)-/i.test(p));
+
+  if (homeIdx >= 0 && homeIdx < parts.length - 1) {
+    return parts.slice(homeIdx + 1).join('/');
+  }
+
+  if (homeIdx >= 0 && homeIdx === parts.length - 1) {
+    return '~';
+  }
+
+  return parts[parts.length - 1];
+}
+
 export function getProjectDirs(): Array<{ name: string; path: string }> {
   const { sessionsDir, extraSessionRoots } = getConfig();
   const results: Array<{ name: string; path: string }> = [];
@@ -256,7 +283,7 @@ export function getProjectDirs(): Array<{ name: string; path: string }> {
         const hasJsonl = fs.readdirSync(subPath).some((f) => f.endsWith('.jsonl'));
         if (hasJsonl) {
           results.push({
-            name: `ext-${d.name}`,
+            name: decodeProjectDirName(d.name),
             path: subPath,
           });
           addedAny = true;
@@ -272,7 +299,7 @@ export function getProjectDirs(): Array<{ name: string; path: string }> {
         const hasJsonl = fs.readdirSync(root).some((f) => f.endsWith('.jsonl'));
         if (hasJsonl) {
           results.push({
-            name: `ext-${path.basename(root)}`,
+            name: decodeProjectDirName(path.basename(root)),
             path: root,
           });
         }

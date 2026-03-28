@@ -417,7 +417,7 @@ describe('getProjectDirs — extra session roots', () => {
 
     process.env.EXTRA_SESSION_ROOTS = tmpDir;
     const dirs = getProjectDirs();
-    const found = dirs.find((d) => d.name === 'ext-my-editor-project');
+    const found = dirs.find((d) => d.name === 'my-editor-project');
     expect(found).toBeDefined();
     expect(found!.path).toBe(sub);
   });
@@ -429,7 +429,7 @@ describe('getProjectDirs — extra session roots', () => {
 
     process.env.EXTRA_SESSION_ROOTS = flatRoot;
     const dirs = getProjectDirs();
-    const found = dirs.find((d) => d.name === 'ext-flat-sessions');
+    const found = dirs.find((d) => d.name === 'flat-sessions');
     expect(found).toBeDefined();
     expect(found!.path).toBe(flatRoot);
   });
@@ -449,8 +449,8 @@ describe('getProjectDirs — extra session roots', () => {
 
     process.env.EXTRA_SESSION_ROOTS = `${rootA}, ${rootB}`;
     const dirs = getProjectDirs();
-    expect(dirs.find((d) => d.name === 'ext-rootA')).toBeDefined();
-    expect(dirs.find((d) => d.name === 'ext-rootB')).toBeDefined();
+    expect(dirs.find((d) => d.name === 'rootA')).toBeDefined();
+    expect(dirs.find((d) => d.name === 'rootB')).toBeDefined();
   });
 
   it('ignores subdirectories without JSONL or agent-transcripts', () => {

@@ -148,25 +148,26 @@ function fastMeta(filePath: string): SessionMeta | null {
       return null;
     }
 
-    const headBuf = Buffer.alloc(Math.min(4096, stat.size));
+    const headSize = Math.min(32768, stat.size);
+    const headBuf = Buffer.alloc(headSize);
     fs.readSync(fd, headBuf, 0, headBuf.length, 0);
     const headStr = headBuf.toString('utf-8');
-    const firstLine = headStr.split('\n').find((l) => l.trim());
-    if (!firstLine) {
+    const headLines = headStr.split('\n').filter((l) => l.trim());
+    if (headLines.length === 0) {
       fs.closeSync(fd);
       return null;
     }
 
     let first;
     try {
-      first = JSON.parse(firstLine);
+      first = JSON.parse(headLines[0]);
     } catch {
       fs.closeSync(fd);
       return null;
     }
 
     let last = first;
-    if (stat.size > 4096) {
+    if (stat.size > headSize) {
       const tailSize = Math.min(4096, stat.size);
       const tailBuf = Buffer.alloc(tailSize);
       fs.readSync(fd, tailBuf, 0, tailSize, stat.size - tailSize);
@@ -182,9 +183,30 @@ function fastMeta(filePath: string): SessionMeta | null {
     }
     fs.closeSync(fd);
 
-    const preview = first.message?.content
-      ? (typeof first.message.content === 'string' ? first.message.content : '').substring(0, 200)
-      : '';
+    let preview = '';
+    for (const line of headLines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === 'user' && entry.message?.role === 'user') {
+          const content = entry.message.content;
+          if (typeof content === 'string') {
+            preview = content.substring(0, 200);
+            break;
+          }
+          if (Array.isArray(content)) {
+            const textBlock = content.find(
+              (b: { type: string; text?: string }) => b.type === 'text' && b.text,
+            );
+            if (textBlock) {
+              preview = textBlock.text.substring(0, 200);
+              break;
+            }
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
 
     return {
       startTime: first.timestamp || 'unknown',
