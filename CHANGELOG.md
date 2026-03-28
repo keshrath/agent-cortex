@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.1 (2026-03-28)
+
+### Bug Fixes
+
+- **Session discovery**: auto-detect `~/.claude/projects` as extra session root so Claude Code sessions are found without requiring `KNOWLEDGE_DATA_DIR` env var (regression from v1.1.0 generic naming refactor)
+
+### Features
+
+- **Dashboard**: clicking a search result now scrolls to and highlights the matching message in the session panel
+
+### Documentation
+
+- **Windows**: added note about C++ build tools requirement for `better-sqlite3` when prebuilt binaries are unavailable (e.g. Node 24+)
+
 ## 1.1.0 (2026-03-27)
 
 ### Multi-Source Session Adapters

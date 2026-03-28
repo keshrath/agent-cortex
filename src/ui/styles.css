@@ -1023,6 +1023,26 @@ h1 {
   font-family: var(--font-mono);
 }
 
+.chat-msg-highlight {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+  animation: highlight-fade 4s ease-out forwards;
+}
+
+@keyframes highlight-fade {
+  0% {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  70% {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  100% {
+    background: transparent;
+    outline-color: transparent;
+  }
+}
+
 /* ── Markdown / Prose ──────────────────────────────────────────────────── */
 .prose h1,
 .prose h2,

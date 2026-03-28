@@ -90,10 +90,12 @@ export function getConfig(): KnowledgeConfig {
       if (trimmed) extraSessionRoots.push(trimmed);
     }
   }
-  // Auto-detect Cursor projects directory
-  const cursorProjects = join(home, '.cursor', 'projects');
-  if (existsSync(cursorProjects) && !extraSessionRoots.includes(cursorProjects)) {
-    extraSessionRoots.push(cursorProjects);
+  // Auto-detect common AI coding tool session directories
+  const autoDetectRoots = [join(home, '.claude', 'projects'), join(home, '.cursor', 'projects')];
+  for (const root of autoDetectRoots) {
+    if (existsSync(root) && root !== sessionsDir && !extraSessionRoots.includes(root)) {
+      extraSessionRoots.push(root);
+    }
   }
 
   const embeddingProvider =

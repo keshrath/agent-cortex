@@ -498,7 +498,7 @@
         const time = relativeTime(r.timestamp || r.date);
         const roleIcon = role === 'user' ? 'person' : role === 'assistant' ? 'smart_toy' : 'chat';
 
-        return `<div class="result-item" data-session-id="${esc(sessionId)}" tabindex="0" role="button">
+        return `<div class="result-item" data-session-id="${esc(sessionId)}" data-excerpt="${esc(excerpt)}" tabindex="0" role="button">
         <div class="result-meta">
           <span class="role-badge" data-role="${esc(role)}"><span class="material-symbols-outlined" style="font-size:12px">${roleIcon}</span> ${esc(role)}</span>
           ${project ? `<span class="result-project">${esc(project)}</span>` : ''}
@@ -511,9 +511,11 @@
       .join('');
 
     el.searchResults.querySelectorAll('.result-item').forEach((card) => {
-      card.addEventListener('click', () => openSessionPanel(card.dataset.sessionId));
+      card.addEventListener('click', () =>
+        openSessionPanel(card.dataset.sessionId, card.dataset.excerpt),
+      );
       card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') openSessionPanel(card.dataset.sessionId);
+        if (e.key === 'Enter') openSessionPanel(card.dataset.sessionId, card.dataset.excerpt);
       });
     });
   }
@@ -600,7 +602,7 @@
     });
   }
 
-  async function openSessionPanel(sessionId) {
+  async function openSessionPanel(sessionId, searchExcerpt) {
     if (!sessionId) return;
     try {
       const [session, summary] = await Promise.allSettled([
@@ -609,7 +611,7 @@
       ]);
       const sData = session.status === 'fulfilled' ? session.value : {};
       const sumData = summary.status === 'fulfilled' ? summary.value : null;
-      openPanel('session', { session: sData, summary: sumData, sessionId });
+      openPanel('session', { session: sData, summary: sumData, sessionId, searchExcerpt });
     } catch (err) {
       toast(`Failed to load session: ${err.message}`, 'error');
     }
@@ -788,6 +790,43 @@
     }
 
     el.panelBody.innerHTML = html;
+
+    // Scroll to and highlight matching message from search
+    if (data.searchExcerpt) {
+      setTimeout(() => {
+        const excerpt = data.searchExcerpt.replace(/\s+/g, ' ').trim().toLowerCase();
+        const msgEls = el.panelBody.querySelectorAll('.chat-msg');
+        let bestMatch = null;
+        let bestScore = -1;
+        msgEls.forEach((msgEl) => {
+          const text = msgEl.textContent.replace(/\s+/g, ' ').trim().toLowerCase();
+          // Exact substring match scores highest (2 + length ratio)
+          if (text.includes(excerpt)) {
+            const score = 2 + excerpt.length / text.length;
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatch = msgEl;
+            }
+          } else {
+            // Fuzzy: check word overlap
+            const words = excerpt.split(' ').filter((w) => w.length > 2);
+            if (words.length > 0) {
+              const matched = words.filter((w) => text.includes(w)).length;
+              const ratio = matched / words.length;
+              if (ratio > 0.5 && ratio > bestScore) {
+                bestScore = ratio;
+                bestMatch = msgEl;
+              }
+            }
+          }
+        });
+        if (bestMatch) {
+          bestMatch.classList.add('chat-msg-highlight');
+          bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => bestMatch.classList.remove('chat-msg-highlight'), 4000);
+        }
+      }, 300);
+    }
   }
 
   // ── Event Binding ──────────────────────────────────────────────────────────

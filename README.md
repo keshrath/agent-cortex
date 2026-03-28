@@ -65,6 +65,14 @@ cd agent-knowledge
 npm install && npm run build
 ```
 
+> **Windows note**: `better-sqlite3` requires native compilation. If `npm install` fails with `gyp ERR!`, install the C++ build tools:
+>
+> ```powershell
+> winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive"
+> ```
+>
+> Then re-run `npm install`. This is only needed when prebuilt binaries aren't available for your Node.js version (e.g. Node 24+).
+
 ### Configure your MCP client
 
 See [Setup Guide](docs/SETUP.md) for client-specific instructions (Claude Code, Cursor, Windsurf, OpenCode).
