@@ -46,7 +46,8 @@ export function loadPersistedConfig(): PersistedConfig {
   if (!existsSync(configPath)) return {};
   try {
     return JSON.parse(readFileSync(configPath, 'utf-8'));
-  } catch {
+  } catch (err) {
+    console.error('[knowledge] load config:', err instanceof Error ? err.message : err);
     return {};
   }
 }
@@ -145,12 +146,13 @@ export function getVersion(): string {
           _version = String(pkg.version);
           return _version;
         }
-      } catch {
+      } catch (err) {
+        console.error('[knowledge] version read:', err instanceof Error ? err.message : err);
         continue;
       }
     }
-  } catch {
-    // fallback
+  } catch (err) {
+    console.error('[knowledge] version resolve:', err instanceof Error ? err.message : err);
   }
   _version = '1.0.0';
   return _version;

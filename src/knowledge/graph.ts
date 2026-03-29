@@ -56,7 +56,8 @@ export class KnowledgeGraph {
   private initialized = false;
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath ?? join(getConfig().dataDir, 'knowledge-vectors.db');
+    // Use a separate lightweight DB — NOT the 544MB vector store
+    this.dbPath = dbPath ?? join(getConfig().dataDir, 'knowledge-scores.db');
   }
 
   private init(): void {

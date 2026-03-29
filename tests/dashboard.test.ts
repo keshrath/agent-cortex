@@ -40,8 +40,8 @@ describe('dashboard HTTP server', () => {
     expect(status).toBe(200);
     const data = JSON.parse(body);
     expect(data.status).toBe('ok');
-    expect(data.version).toBeDefined();
-    expect(typeof data.uptime).toBe('number');
+    expect(data.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(data.uptime).toBeGreaterThanOrEqual(0);
   });
 
   it('GET /api/knowledge returns array', async () => {
@@ -96,8 +96,11 @@ describe('dashboard HTTP server', () => {
 
   it('serves static files for root path', async () => {
     const { status, headers } = await fetch('/');
-    // May be 200 (if UI dir exists), 404, or 403 (path traversal protection)
-    expect([200, 403, 404]).toContain(status);
+    // Status depends on whether the built UI directory (dist/ui/) exists:
+    // - 200: UI files are built and served (content-type must be text/html)
+    // - 404: UI not built yet (dev environment without prior `npm run build`)
+    // 403 is NOT expected for root path — only for path traversal attempts
+    expect([200, 404]).toContain(status);
     if (status === 200) {
       expect(headers['content-type']).toContain('text/html');
     }

@@ -23,7 +23,8 @@ function getLastDistillTime(): string | null {
   if (!existsSync(cursorPath)) return null;
   try {
     return readFileSync(cursorPath, 'utf-8').trim() || null;
-  } catch {
+  } catch (err) {
+    console.error('[knowledge] read distill cursor:', err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -277,7 +278,8 @@ function extractInsights(cutoff: string | null): Map<string, ProjectInsights> {
           pi.files.add(cleaned);
         }
         if (meta.startTime > pi.latestDate) pi.latestDate = meta.startTime;
-      } catch {
+      } catch (err) {
+        console.error('[knowledge] extract insights:', err instanceof Error ? err.message : err);
         continue;
       }
     }

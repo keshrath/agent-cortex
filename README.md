@@ -2,8 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node >= 20](https://img.shields.io/badge/Node-%3E%3D%2020-brightgreen.svg)](https://nodejs.org)
-[![Tests: 280 passing](https://img.shields.io/badge/Tests-295%20passing-brightgreen.svg)]()
-[![MCP Tools: 16](https://img.shields.io/badge/MCP%20Tools-16-blueviolet.svg)]()
+[![Tests: 352 passing](https://img.shields.io/badge/Tests-352%20passing-brightgreen.svg)]()
+[![MCP Tools: 6](https://img.shields.io/badge/MCP%20Tools-6-blueviolet.svg)]()
 
 **Cross-session memory and recall for AI coding assistants** -- works with Claude Code, Cursor, OpenCode, Cline, Continue.dev, and Aider out of the box. Git-synced knowledge base, hybrid semantic+TF-IDF search, auto-distillation with secrets scrubbing.
 
@@ -52,12 +52,15 @@ No configuration needed. Additional session roots can be added via the `EXTRA_SE
 - **Embeddings** -- local (Hugging Face), OpenAI, Claude/Voyage, or Gemini providers
 - **Fuzzy matching** -- typo-tolerant search using Levenshtein distance
 - **6 search scopes** -- errors, plans, configs, tools, files, decisions
-- **Configurable git URL** -- `knowledge_config` tool for runtime setup, persisted at XDG/AppData location
+- **6 MCP tools** -- consolidated action-based interface (knowledge, knowledge_search, knowledge_session, knowledge_graph, knowledge_analyze, knowledge_admin)
+- **Configurable git URL** -- `knowledge_admin(action: "config")` for runtime setup, persisted at XDG/AppData location
 - **Cross-machine persistence** -- knowledge syncs via git, sessions read from local storage of each tool
 - **Real-time dashboard** -- browse, search, and manage at `localhost:3423`
 - **Secrets scrubbing** -- API keys, tokens, passwords, private keys automatically redacted before git push
 - **Knowledge graph** -- relationship edges between entries (related_to, supersedes, depends_on, contradicts, specializes, part_of, alternative_to, builds_on) with BFS traversal
 - **Confidence/decay scoring** -- entries scored by access frequency and recency; auto-promotion from candidate to established to proven
+- **Memory consolidation** -- TF-IDF duplicate detection on write (warns of similar entries) plus `knowledge_analyze(action: "consolidate")` for batch dedup scanning
+- **Reflection cycle** -- `knowledge_analyze(action: "reflect")` surfaces unconnected entries and generates structured prompts for the agent to identify new graph connections
 - **Auto-linking on write** -- new entries automatically linked to top-3 similar existing entries when cosine similarity > 0.7
 
 ## Quick Start
@@ -90,45 +93,59 @@ claude mcp add agent-knowledge -s user \
 
 Dashboard: **http://localhost:3423** (auto-starts with MCP server)
 
-## MCP Tools
+## MCP Tools (6)
 
 ### Knowledge Base
 
-| Tool               | Description                         | Parameters                                       |
-| ------------------ | ----------------------------------- | ------------------------------------------------ |
-| `knowledge_list`   | List entries by category and/or tag | `category?`, `tag?`                              |
-| `knowledge_read`   | Read a specific entry               | `path` (required)                                |
-| `knowledge_write`  | Create/update entry (auto git sync) | `category`, `filename`, `content` (all required) |
-| `knowledge_delete` | Delete an entry (auto git sync)     | `path` (required)                                |
-| `knowledge_sync`   | Manual git pull + push              | --                                               |
+| Tool        | Action   | Description                         | Parameters                                       |
+| ----------- | -------- | ----------------------------------- | ------------------------------------------------ |
+| `knowledge` | `list`   | List entries by category and/or tag | `category?`, `tag?`                              |
+|             | `read`   | Read a specific entry               | `path` (required)                                |
+|             | `write`  | Create/update entry (auto git sync) | `category`, `filename`, `content` (all required) |
+|             | `delete` | Delete an entry (auto git sync)     | `path` (required)                                |
+|             | `sync`   | Manual git pull + push              | --                                               |
+
+### Search
+
+| Tool               | Description                                     | Parameters                                              |
+| ------------------ | ----------------------------------------------- | ------------------------------------------------------- |
+| `knowledge_search` | Hybrid semantic + TF-IDF search across sessions | `query`, `project?`, `role?`, `max_results?`, `ranked?` |
+|                    | Scoped recall (when `scope` is provided)        | `query`, `scope`, `project?`, `max_results?`            |
+
+Scopes: `errors`, `plans`, `configs`, `tools`, `files`, `decisions`, `all`.
+
+### Sessions
+
+| Tool                | Action    | Description                            | Parameters                                          |
+| ------------------- | --------- | -------------------------------------- | --------------------------------------------------- |
+| `knowledge_session` | `list`    | List sessions with metadata            | `project?`                                          |
+|                     | `get`     | Retrieve full session conversation     | `session_id`, `project?`, `include_tools?`, `tail?` |
+|                     | `summary` | Session summary (topics, tools, files) | `session_id`, `project?`                            |
 
 ### Knowledge Graph
 
-| Tool               | Description                        | Parameters                                             |
-| ------------------ | ---------------------------------- | ------------------------------------------------------ |
-| `knowledge_link`   | Create/update edge between entries | `source`, `target`, `rel_type` (required), `strength?` |
-| `knowledge_unlink` | Remove edges between entries       | `source`, `target` (required), `rel_type?`             |
-| `knowledge_links`  | List edges                         | `entry?`, `rel_type?`                                  |
-| `knowledge_graph`  | BFS traversal from an entry        | `entry` (required), `depth?`                           |
+| Tool              | Action     | Description                        | Parameters                                  |
+| ----------------- | ---------- | ---------------------------------- | ------------------------------------------- |
+| `knowledge_graph` | `link`     | Create/update edge between entries | `source`, `target`, `rel_type`, `strength?` |
+|                   | `unlink`   | Remove edges between entries       | `source`, `target`, `rel_type?`             |
+|                   | `list`     | List edges                         | `entry?`, `rel_type?`                       |
+|                   | `traverse` | BFS traversal from an entry        | `entry`, `depth?`                           |
 
 Relationship types: `related_to`, `supersedes`, `depends_on`, `contradicts`, `specializes`, `part_of`, `alternative_to`, `builds_on`.
 
-### Session Search
+### Analysis
 
-| Tool                 | Description                             | Parameters                                                         |
-| -------------------- | --------------------------------------- | ------------------------------------------------------------------ |
-| `knowledge_sessions` | List sessions with metadata             | `project?`                                                         |
-| `knowledge_search`   | TF-IDF ranked search across transcripts | `query` (required), `project?`, `role?`, `max_results?`, `ranked?` |
-| `knowledge_get`      | Retrieve full session conversation      | `session_id` (required), `project?`, `include_tools?`, `tail?`     |
-| `knowledge_summary`  | Session summary (topics, tools, files)  | `session_id` (required), `project?`                                |
-| `knowledge_recall`   | Scoped search across sessions           | `scope` (required), `query` (required), `project?`, `max_results?` |
+| Tool                | Action        | Description                          | Parameters                  |
+| ------------------- | ------------- | ------------------------------------ | --------------------------- |
+| `knowledge_analyze` | `consolidate` | Find near-duplicate entries          | `category?`, `threshold?`   |
+|                     | `reflect`     | Find unconnected entries for linking | `category?`, `max_entries?` |
 
 ### Admin
 
-| Tool                     | Description                  | Parameters                                 |
-| ------------------------ | ---------------------------- | ------------------------------------------ |
-| `knowledge_index_status` | Vector store statistics      | --                                         |
-| `knowledge_config`       | View or update configuration | `git_url?`, `memory_dir?`, `auto_distill?` |
+| Tool              | Action   | Description                  | Parameters                                 |
+| ----------------- | -------- | ---------------------------- | ------------------------------------------ |
+| `knowledge_admin` | `status` | Vector store statistics      | --                                         |
+|                   | `config` | View or update configuration | `git_url?`, `memory_dir?`, `auto_distill?` |
 
 ## REST API
 
@@ -194,10 +211,10 @@ graph LR
 
 Entries can be connected via typed, weighted edges stored in a dedicated `edges` SQLite table. Eight relationship types are supported: `related_to`, `supersedes`, `depends_on`, `contradicts`, `specializes`, `part_of`, `alternative_to`, `builds_on`.
 
-- **`knowledge_link`** creates or updates an edge (with optional strength 0-1)
-- **`knowledge_unlink`** removes edges (optionally filtered by type)
-- **`knowledge_links`** lists edges for an entry or relationship type
-- **`knowledge_graph`** performs BFS traversal from a starting entry to a configurable depth
+- **`knowledge_graph(action: "link")`** creates or updates an edge (with optional strength 0-1)
+- **`knowledge_graph(action: "unlink")`** removes edges (optionally filtered by type)
+- **`knowledge_graph(action: "list")`** lists edges for an entry or relationship type
+- **`knowledge_graph(action: "traverse")`** performs BFS traversal from a starting entry to a configurable depth
 
 ### Auto-linking
 
@@ -241,7 +258,7 @@ Frequently accessed entries rise in search rankings; stale entries decay over ti
 ## Testing
 
 ```bash
-npm test              # Run all 295 tests
+npm test              # Run all 352 tests
 npm run test:watch    # Watch mode
 npm run lint          # Type-check (tsc --noEmit)
 ```

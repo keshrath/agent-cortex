@@ -47,7 +47,11 @@ export class AnthropicEmbeddingProvider implements EmbeddingProvider {
     try {
       const result = await this.embed(['test']);
       return result.length === 1 && result[0].length > 0;
-    } catch {
+    } catch (err) {
+      console.error(
+        '[knowledge] anthropic availability:',
+        err instanceof Error ? err.message : err,
+      );
       return false;
     }
   }

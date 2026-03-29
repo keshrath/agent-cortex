@@ -47,7 +47,8 @@ export interface VectorStoreStats {
   dimensions: number | null;
 }
 
-/** Convert a number[] to a Float32Array buffer for BLOB storage. */
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function toFloat32Buffer(vec: number[]): Buffer {
   const f32 = new Float32Array(vec);
   return Buffer.from(f32.buffer);
@@ -56,81 +57,96 @@ function toFloat32Buffer(vec: number[]): Buffer {
 /**
  * SQLite + sqlite-vec vector store for semantic search.
  *
- * Lazily initializes the database on first access. Stores embeddings as
- * Float32 BLOBs and uses sqlite-vec's vec0 virtual table for cosine
- * similarity search.
+ * Call `connect()` once before using the store, or let public methods
+ * auto-connect on first access. The DB connection and schema are set up
+ * once; subsequent calls are no-ops.
  */
 export class VectorStore {
   private db: Database | null = null;
   private dbPath: string;
-  private initialized = false;
+  private connected = false;
   private vecAvailable = false;
   private currentDimensions: number | null = null;
+  private connectError: Error | null = null;
 
-  /**
-   * Create a VectorStore instance.
-   * @param dbPath - Path to the SQLite database file. Defaults to `{dataDir}/knowledge-vectors.db`.
-   */
   constructor(dbPath?: string) {
     this.dbPath = dbPath ?? join(getConfig().dataDir, 'knowledge-vectors.db');
   }
 
+  // ── Connection ─────────────────────────────────────────────────────────────
+
   /**
-   * Initialize the database: create tables, load sqlite-vec extension.
-   * Called lazily on first operation that needs the DB.
+   * Open the database, create tables, and load the sqlite-vec extension.
+   * Safe to call multiple times — subsequent calls are no-ops unless
+   * `dimensions` changes (which recreates the vec0 virtual table).
+   *
+   * If called without `dimensions`, uses the value stored in the meta table
+   * from a previous run. Throws if no dimensions are available at all.
    */
-  private init(dimensions: number): void {
-    if (this.initialized && this.currentDimensions === dimensions) return;
+  connect(dimensions?: number): void {
+    if (this.connectError) {
+      throw new Error(`Vector store previously failed to initialize: ${this.connectError.message}`);
+    }
+
+    const dims = dimensions ?? this.currentDimensions ?? this.readStoredDimensions();
+
+    if (this.connected && this.currentDimensions === dims) return;
 
     try {
-      if (!this.db) {
-        mkdirSync(dirname(this.dbPath), { recursive: true });
-        const BetterSqlite3 = require('better-sqlite3') as typeof DatabaseConstructor;
-        this.db = new BetterSqlite3(this.dbPath);
-        this.db.pragma('journal_mode = WAL');
-        this.db.pragma('foreign_keys = ON');
-      }
-
+      this.openDb();
+      this.createSchema();
       this.loadVecExtension();
 
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS embeddings (
-          id TEXT PRIMARY KEY,
-          source TEXT NOT NULL CHECK(source IN ('knowledge','session')),
-          source_id TEXT NOT NULL,
-          chunk_index INTEGER NOT NULL,
-          chunk_text TEXT NOT NULL,
-          provider TEXT NOT NULL,
-          dimensions INTEGER NOT NULL,
-          embedding BLOB NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          metadata TEXT
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_emb_source ON embeddings(source, source_id);
-        CREATE INDEX IF NOT EXISTS idx_emb_provider ON embeddings(provider);
-
-        CREATE TABLE IF NOT EXISTS meta (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL
-        );
-      `);
-
-      if (this.vecAvailable) {
-        this.ensureVecTable(dimensions);
+      if (dims !== null && this.vecAvailable) {
+        this.ensureVecTable(dims);
+        this.currentDimensions = dims;
       }
 
-      this.currentDimensions = dimensions;
-      this.initialized = true;
+      this.connected = true;
     } catch (err) {
+      this.connectError = err instanceof Error ? err : new Error(String(err));
       console.error(`[knowledge] Failed to initialize vector store: ${err}`);
-      throw err;
+      throw this.connectError;
     }
   }
 
-  /** Attempt to load the sqlite-vec extension. */
-  private loadVecExtension(): void {
+  private openDb(): void {
+    if (this.db) return;
+    mkdirSync(dirname(this.dbPath), { recursive: true });
+    const BetterSqlite3 = require('better-sqlite3') as typeof DatabaseConstructor;
+    this.db = new BetterSqlite3(this.dbPath);
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('foreign_keys = ON');
+  }
+
+  private createSchema(): void {
     if (!this.db) return;
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS embeddings (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL CHECK(source IN ('knowledge','session')),
+        source_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        chunk_text TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        dimensions INTEGER NOT NULL,
+        embedding BLOB NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        metadata TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_emb_source ON embeddings(source, source_id);
+      CREATE INDEX IF NOT EXISTS idx_emb_provider ON embeddings(provider);
+
+      CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+  }
+
+  private loadVecExtension(): void {
+    if (!this.db || this.vecAvailable) return;
 
     try {
       const sqliteVec = require('sqlite-vec') as { load: (db: Database) => void };
@@ -144,7 +160,6 @@ export class VectorStore {
     }
   }
 
-  /** Create or verify the vec0 virtual table matches the expected dimensions. */
   private ensureVecTable(dimensions: number): void {
     if (!this.db || !this.vecAvailable) return;
 
@@ -171,40 +186,10 @@ export class VectorStore {
     }
   }
 
-  /** Get a value from the meta table. */
-  private getMetaValue(key: string): string | null {
-    if (!this.db) return null;
-    try {
-      const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
-        | { value: string }
-        | undefined;
-      return row?.value ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Set a value in the meta table. */
-  private setMetaValue(key: string, value: string): void {
-    if (!this.db) return;
-    try {
-      this.db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run(key, value);
-    } catch (err) {
-      console.error(`[knowledge] Failed to set meta value ${key}: ${err}`);
-    }
-  }
-
-  /** Ensure DB is initialized, using dimensions from the first entry or the stored value. */
-  private ensureInit(dimensions?: number): void {
-    const dims = dimensions ?? this.currentDimensions ?? this.getStoredDimensions();
-    if (dims === null) {
-      throw new Error('[knowledge] Cannot initialize vector store without known dimensions');
-    }
-    this.init(dims);
-  }
-
-  /** Read stored dimensions from meta (requires db to exist). */
-  private getStoredDimensions(): number | null {
+  /**
+   * Read stored dimensions from meta (opens a temporary read-only DB if needed).
+   */
+  private readStoredDimensions(): number | null {
     if (this.db) {
       const val = this.getMetaValue('dimensions');
       return val ? parseInt(val, 10) : null;
@@ -220,43 +205,81 @@ export class VectorStore {
       } finally {
         tmpDb.close();
       }
-    } catch {
+    } catch (err) {
+      console.error('[knowledge] stored dimensions:', err instanceof Error ? err.message : err);
       return null;
     }
   }
 
   /**
+   * Ensure the store is connected. Auto-connects if not yet connected.
+   * If `dimensions` is provided, also ensures the vec0 table matches.
+   *
+   * Throws a clear error if initialization fails.
+   */
+  private requireConnection(dimensions?: number): Database {
+    if (!this.connected || (dimensions && this.currentDimensions !== dimensions)) {
+      this.connect(dimensions ?? undefined);
+    }
+    if (!this.db) {
+      throw new Error('Vector store database is not available');
+    }
+    return this.db;
+  }
+
+  // ── Meta helpers ───────────────────────────────────────────────────────────
+
+  private getMetaValue(key: string): string | null {
+    if (!this.db) return null;
+    try {
+      const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
+        | { value: string }
+        | undefined;
+      return row?.value ?? null;
+    } catch (err) {
+      console.error('[knowledge] get meta:', err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
+  private setMetaValue(key: string, value: string): void {
+    if (!this.db) return;
+    try {
+      this.db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run(key, value);
+    } catch (err) {
+      console.error(`[knowledge] Failed to set meta value ${key}: ${err}`);
+    }
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+
+  /**
    * Store embeddings for a source. Replaces existing chunks for the same source_id.
    * Uses a transaction for atomicity.
-   *
-   * @param entries - The embedding entries to store
    */
   upsert(entries: VectorEntry[]): void {
     if (entries.length === 0) return;
 
     try {
       const dims = entries[0].dimensions;
-      this.ensureInit(dims);
-      if (!this.db) return;
+      const db = this.requireConnection(dims);
 
-      const insertEmbed = this.db.prepare(`
+      const insertEmbed = db.prepare(`
         INSERT OR REPLACE INTO embeddings
           (id, source, source_id, chunk_index, chunk_text, provider, dimensions, embedding, metadata)
         VALUES
           (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      const deleteVec = this.vecAvailable
-        ? this.db.prepare('DELETE FROM vec_idx WHERE id = ?')
-        : null;
+      const deleteVec = this.vecAvailable ? db.prepare('DELETE FROM vec_idx WHERE id = ?') : null;
 
       const insertVec = this.vecAvailable
-        ? this.db.prepare('INSERT INTO vec_idx (id, embedding) VALUES (?, ?)')
+        ? db.prepare('INSERT INTO vec_idx (id, embedding) VALUES (?, ?)')
         : null;
 
-      const deleteBySourceEmbed = this.db.prepare('SELECT id FROM embeddings WHERE source_id = ?');
+      const deleteBySourceEmbed = db.prepare('SELECT id FROM embeddings WHERE source_id = ?');
 
-      const transaction = this.db.transaction((items: VectorEntry[]) => {
+      const transaction = db.transaction((items: VectorEntry[]) => {
         const sourceIds = new Set(items.map((e) => e.sourceId));
         for (const sid of sourceIds) {
           if (deleteVec) {
@@ -265,7 +288,7 @@ export class VectorStore {
               deleteVec.run(row.id);
             }
           }
-          this.db!.prepare('DELETE FROM embeddings WHERE source_id = ?').run(sid);
+          db.prepare('DELETE FROM embeddings WHERE source_id = ?').run(sid);
         }
 
         for (const entry of items) {
@@ -296,10 +319,6 @@ export class VectorStore {
 
   /**
    * Search by vector similarity. Returns top-k nearest neighbors.
-   *
-   * @param queryVector - The query embedding vector
-   * @param maxResults - Maximum number of results (default 10)
-   * @returns Sorted results with cosine similarity scores
    */
   search(queryVector: number[], maxResults: number = 10): VectorSearchResult[] {
     return this.searchInternal(queryVector, maxResults);
@@ -307,11 +326,6 @@ export class VectorStore {
 
   /**
    * Search filtered by source type (knowledge or session).
-   *
-   * @param queryVector - The query embedding vector
-   * @param source - Filter to 'knowledge' or 'session' entries only
-   * @param maxResults - Maximum number of results (default 10)
-   * @returns Sorted results with cosine similarity scores
    */
   searchBySource(
     queryVector: number[],
@@ -321,19 +335,18 @@ export class VectorStore {
     return this.searchInternal(queryVector, maxResults, source);
   }
 
-  /** Internal search implementation with optional source filter. */
   private searchInternal(
     queryVector: number[],
     maxResults: number,
     source?: 'knowledge' | 'session',
   ): VectorSearchResult[] {
+    let db: Database;
     try {
-      this.ensureInit(queryVector.length);
-    } catch {
+      db = this.requireConnection(queryVector.length);
+    } catch (err) {
+      console.error('[knowledge] search init:', err instanceof Error ? err.message : err);
       return [];
     }
-
-    if (!this.db) return [];
 
     if (!this.vecAvailable) {
       console.error('[knowledge] Vector search unavailable — sqlite-vec not loaded');
@@ -342,10 +355,9 @@ export class VectorStore {
 
     try {
       const queryBuf = toFloat32Buffer(queryVector);
-
       const fetchLimit = source ? maxResults * 3 : maxResults;
 
-      const rows = this.db
+      const rows = db
         .prepare(
           `SELECT v.id, v.distance
            FROM vec_idx v
@@ -358,7 +370,7 @@ export class VectorStore {
       if (rows.length === 0) return [];
 
       const idPlaceholders = rows.map(() => '?').join(',');
-      const embeddingRows = this.db
+      const embeddingRows = db
         .prepare(
           `SELECT id, source, source_id, chunk_text, metadata
            FROM embeddings
@@ -401,32 +413,31 @@ export class VectorStore {
 
   /**
    * Delete all embeddings for a given source_id.
-   *
-   * @param sourceId - The source identifier to remove
    */
   deleteBySource(sourceId: string): void {
+    let db: Database;
     try {
-      this.ensureInit();
-    } catch {
+      db = this.requireConnection();
+    } catch (err) {
+      console.error('[knowledge] deleteBySource init:', err instanceof Error ? err.message : err);
       return;
     }
-    if (!this.db) return;
 
     try {
-      const ids = this.db
+      const ids = db
         .prepare('SELECT id FROM embeddings WHERE source_id = ?')
         .all(sourceId) as Array<{ id: string }>;
 
       if (ids.length === 0) return;
 
-      const transaction = this.db.transaction(() => {
+      const transaction = db.transaction(() => {
         if (this.vecAvailable) {
-          const deleteVec = this.db!.prepare('DELETE FROM vec_idx WHERE id = ?');
+          const deleteVec = db.prepare('DELETE FROM vec_idx WHERE id = ?');
           for (const row of ids) {
             deleteVec.run(row.id);
           }
         }
-        this.db!.prepare('DELETE FROM embeddings WHERE source_id = ?').run(sourceId);
+        db.prepare('DELETE FROM embeddings WHERE source_id = ?').run(sourceId);
       });
 
       transaction();
@@ -437,20 +448,18 @@ export class VectorStore {
 
   /**
    * Check whether a source_id has any stored embeddings.
-   *
-   * @param sourceId - The source identifier to check
-   * @returns True if at least one embedding exists for this source
    */
   hasEmbeddings(sourceId: string): boolean {
+    let db: Database;
     try {
-      this.ensureInit();
-    } catch {
+      db = this.requireConnection();
+    } catch (err) {
+      console.error('[knowledge] hasEmbeddings init:', err instanceof Error ? err.message : err);
       return false;
     }
-    if (!this.db) return false;
 
     try {
-      const row = this.db
+      const row = db
         .prepare('SELECT 1 FROM embeddings WHERE source_id = ? LIMIT 1')
         .get(sourceId) as Record<string, unknown> | undefined;
       return row !== undefined;
@@ -462,13 +471,12 @@ export class VectorStore {
 
   /**
    * Get the name of the currently active embedding provider.
-   *
-   * @returns The provider name, or null if none is set
    */
   getCurrentProvider(): string | null {
     try {
-      this.ensureInit();
-    } catch {
+      this.requireConnection();
+    } catch (err) {
+      console.error('[knowledge] getProvider init:', err instanceof Error ? err.message : err);
       return null;
     }
     return this.getMetaValue('provider');
@@ -478,20 +486,17 @@ export class VectorStore {
    * Set the active embedding provider. If the provider has changed since
    * the last call, all existing embeddings are wiped to avoid mixing
    * incompatible vector spaces.
-   *
-   * @param providerName - The provider name (e.g. "openai", "ollama")
-   * @param dimensions - The embedding dimensions for this provider
-   * @returns True if a wipe was performed (provider changed)
    */
   setProvider(providerName: string, dimensions: number): boolean {
-    this.init(dimensions);
-    if (!this.db) return false;
+    const db = this.requireConnection(dimensions);
+    if (!db) return false;
 
     const current = this.getMetaValue('provider');
     if (current && current !== providerName) {
       this.wipe();
-      this.initialized = false;
-      this.init(dimensions);
+      this.connected = false;
+      this.connectError = null;
+      this.connect(dimensions);
       this.setMetaValue('provider', providerName);
       this.setMetaValue('dimensions', String(dimensions));
       return true;
@@ -508,19 +513,20 @@ export class VectorStore {
    * Used when switching embedding providers to avoid mixing vector spaces.
    */
   wipe(): void {
+    let db: Database;
     try {
-      this.ensureInit();
-    } catch {
+      db = this.requireConnection();
+    } catch (err) {
+      console.error('[knowledge] wipe init:', err instanceof Error ? err.message : err);
       return;
     }
-    if (!this.db) return;
 
     try {
-      this.db.exec('DELETE FROM embeddings');
+      db.exec('DELETE FROM embeddings');
       if (this.vecAvailable) {
-        this.db.exec('DROP TABLE IF EXISTS vec_idx');
+        db.exec('DROP TABLE IF EXISTS vec_idx');
       }
-      this.db.exec("DELETE FROM meta WHERE key = 'dimensions'");
+      db.exec("DELETE FROM meta WHERE key = 'dimensions'");
       this.currentDimensions = null;
     } catch (err) {
       console.error(`[knowledge] Wipe failed: ${err}`);
@@ -529,8 +535,6 @@ export class VectorStore {
 
   /**
    * Get statistics about the vector store.
-   *
-   * @returns Counts by source type, DB file size, provider, and dimensions
    */
   stats(): VectorStoreStats {
     const empty: VectorStoreStats = {
@@ -543,36 +547,39 @@ export class VectorStore {
       dimensions: null,
     };
 
+    let db: Database;
     try {
-      this.ensureInit();
-    } catch {
-      // If init fails (no dimensions yet), try opening DB directly for stats
+      db = this.requireConnection();
+    } catch (err) {
+      console.error('[knowledge] stats init:', err instanceof Error ? err.message : err);
       try {
-        if (!this.db) {
-          const BetterSqlite3 = require('better-sqlite3') as typeof DatabaseConstructor;
-          this.db = new BetterSqlite3(this.dbPath);
-          this.db.pragma('journal_mode = WAL');
-        }
-      } catch {
+        this.openDb();
+        this.createSchema();
+        this.connected = true;
+        this.connectError = null;
+        db = this.db!;
+      } catch (err2) {
+        console.error('[knowledge] stats db open:', err2 instanceof Error ? err2.message : err2);
         return empty;
       }
     }
-    if (!this.db) return empty;
+
+    if (!db) return empty;
 
     try {
-      const total = this.db.prepare('SELECT COUNT(*) as count FROM embeddings').get() as {
+      const total = db.prepare('SELECT COUNT(*) as count FROM embeddings').get() as {
         count: number;
       };
 
-      const knowledge = this.db
+      const knowledge = db
         .prepare("SELECT COUNT(*) as count FROM embeddings WHERE source = 'knowledge'")
         .get() as { count: number };
 
-      const session = this.db
+      const session = db
         .prepare("SELECT COUNT(*) as count FROM embeddings WHERE source = 'session'")
         .get() as { count: number };
 
-      const uniqueSessions = this.db
+      const uniqueSessions = db
         .prepare(
           "SELECT COUNT(DISTINCT source_id) as count FROM embeddings WHERE source = 'session'",
         )
@@ -582,8 +589,8 @@ export class VectorStore {
       try {
         const stat = statSync(this.dbPath);
         dbSizeMB = Math.round((stat.size / (1024 * 1024)) * 100) / 100;
-      } catch {
-        /* empty — file may not exist yet */
+      } catch (err) {
+        console.error('[knowledge] db stat:', err instanceof Error ? err.message : err);
       }
 
       const provider = this.getMetaValue('provider');
@@ -612,7 +619,8 @@ export class VectorStore {
       console.error(`[knowledge] Failed to close vector store: ${err}`);
     } finally {
       this.db = null;
-      this.initialized = false;
+      this.connected = false;
+      this.connectError = null;
       this.currentDimensions = null;
     }
   }

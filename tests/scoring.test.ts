@@ -43,7 +43,7 @@ describe('EntryScoring', () => {
       expect(score.entry_path).toBe('projects/test.md');
       expect(score.access_count).toBe(1);
       expect(score.maturity).toBe('candidate');
-      expect(score.last_accessed).toBeTruthy();
+      expect(score.last_accessed).toMatch(/^\d{4}-\d{2}-\d{2}/);
     });
 
     it('increments access_count on repeated access', () => {
@@ -51,6 +51,15 @@ describe('EntryScoring', () => {
       scoring.recordAccess('projects/test.md');
       const score = scoring.recordAccess('projects/test.md');
       expect(score.access_count).toBe(3);
+    });
+
+    it('stays candidate at 4 accesses', () => {
+      let score;
+      for (let i = 0; i < 4; i++) {
+        score = scoring.recordAccess('projects/boundary.md');
+      }
+      expect(score!.access_count).toBe(4);
+      expect(score!.maturity).toBe('candidate');
     });
 
     it('auto-promotes candidate to established at 5 accesses', () => {

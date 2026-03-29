@@ -105,7 +105,7 @@ export function listEntries(dir: string, category?: string, tag?: string): Knowl
       }
 
       // Derive category from the first path segment
-      const entryCategory = file.includes('/') ? file.split('/')[0] : '';
+      const [entryCategory = ''] = file.split('/');
 
       entries.push({
         path: file,
@@ -114,7 +114,8 @@ export function listEntries(dir: string, category?: string, tag?: string): Knowl
         updated: (typeof meta.updated === 'string' ? meta.updated : '') || '',
         category: entryCategory,
       });
-    } catch {
+    } catch (err) {
+      console.error('[knowledge] list entry:', err instanceof Error ? err.message : err);
       continue;
     }
   }
@@ -145,7 +146,7 @@ export function readEntry(
   const content = fs.readFileSync(filePath, 'utf-8');
   const { meta, body } = parseFrontmatter(content);
 
-  const entryCategory = entryPath.includes('/') ? entryPath.split('/')[0] : '';
+  const [entryCategory = ''] = entryPath.split('/');
 
   const entry: KnowledgeEntry = {
     path: entryPath,

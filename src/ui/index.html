@@ -114,6 +114,18 @@
         >
           <div class="view-header">
             <h2><span class="material-symbols-outlined view-icon">folder</span>Knowledge Base</h2>
+            <div class="view-actions">
+              <button
+                id="btn-consolidate"
+                class="header-action-btn"
+                title="Scan for duplicate entries"
+              >
+                <span class="material-symbols-outlined">content_copy</span>Duplicates
+              </button>
+              <button id="btn-reflect" class="header-action-btn" title="Find unconnected entries">
+                <span class="material-symbols-outlined">psychology</span>Reflect
+              </button>
+            </div>
           </div>
           <div
             class="filter-chips"
@@ -336,6 +348,11 @@
       media="(prefers-color-scheme: dark)"
     />
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="render-knowledge.js"></script>
+    <script src="render-search.js"></script>
+    <script src="render-sessions.js"></script>
+    <script src="render-panel.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

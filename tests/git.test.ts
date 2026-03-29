@@ -33,8 +33,10 @@ describe('gitPull', () => {
 
   it('succeeds on a repo with no remote (graceful failure)', async () => {
     const result = await gitPull(tmpDir);
-    expect(typeof result.success).toBe('boolean');
-    expect(typeof result.message).toBe('string');
+    // No remote configured, so pull should fail gracefully
+    expect(result.success).toBe(false);
+    expect(result.message).toEqual(expect.any(String));
+    expect(result.message.length).toBeGreaterThan(0);
   });
 });
 
@@ -166,7 +168,8 @@ describe('gitSync', () => {
     const result = await gitSync(tmpDir);
     expect(result).toHaveProperty('pull');
     expect(result).toHaveProperty('push');
-    expect(typeof result.pull.success).toBe('boolean');
-    expect(typeof result.push.success).toBe('boolean');
+    // No remote configured, so both pull and push fail gracefully
+    expect(result.pull.success).toBe(false);
+    expect(result.push.success).toBe(false);
   });
 });

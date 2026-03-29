@@ -6,6 +6,8 @@ import { listEntries, readEntry } from './knowledge/store.js';
 import { searchKnowledge } from './knowledge/search.js';
 import { getEntryScoring, decayFactor, maturityMultiplier } from './knowledge/scoring.js';
 import { getKnowledgeGraph } from './knowledge/graph.js';
+import { consolidate } from './knowledge/consolidate.js';
+import { reflect } from './knowledge/reflect.js';
 import {
   getProjectDirs,
   getSessionFiles,
@@ -76,7 +78,8 @@ function serveStatic(uiDir: string, reqPath: string, res: http.ServerResponse): 
   let decoded: string;
   try {
     decoded = decodeURIComponent(filePath);
-  } catch {
+  } catch (err) {
+    console.error('[knowledge] decode URI:', err instanceof Error ? err.message : err);
     errorResponse(res, 'Bad request', 400);
     return;
   }
@@ -165,7 +168,8 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
         const store = new VectorStore();
         const stats = store.stats();
         jsonResponse(res, stats);
-      } catch {
+      } catch (err) {
+        console.error('[knowledge] index-status:', err instanceof Error ? err.message : err);
         jsonResponse(res, {
           totalEntries: 0,
           knowledgeEntries: 0,
@@ -188,7 +192,6 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
         maxResults: maxResults ? parseInt(maxResults, 10) : undefined,
       });
 
-      // Enrich search results with score breakdown
       try {
         const scoring = getEntryScoring();
         const paths = results.map((r) => r.entry.path);
@@ -206,9 +209,28 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
           };
         });
         jsonResponse(res, enriched);
-      } catch {
+      } catch (err) {
+        console.error('[knowledge] search enrichment:', err instanceof Error ? err.message : err);
         jsonResponse(res, results);
       }
+      return true;
+    }
+
+    if (pathname === '/api/knowledge/consolidate') {
+      const category = url.searchParams.get('category') || undefined;
+      const thresholdParam = url.searchParams.get('threshold');
+      const threshold = thresholdParam ? parseFloat(thresholdParam) : 0.5;
+      const report = consolidate(memoryDir, category, threshold);
+      jsonResponse(res, report);
+      return true;
+    }
+
+    if (pathname === '/api/knowledge/reflect') {
+      const category = url.searchParams.get('category') || undefined;
+      const maxParam = url.searchParams.get('max_entries');
+      const maxEntries = maxParam ? parseInt(maxParam, 10) : 20;
+      const result = reflect(memoryDir, category, maxEntries);
+      jsonResponse(res, result);
       return true;
     }
 
@@ -232,7 +254,8 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
           };
         });
         jsonResponse(res, enriched);
-      } catch {
+      } catch (err) {
+        console.error('[knowledge] entries enrichment:', err instanceof Error ? err.message : err);
         // Fallback: return entries without score data
         jsonResponse(res, entries);
       }
@@ -247,7 +270,8 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
         const graph = getKnowledgeGraph();
         const edges = graph.links(entryPath);
         jsonResponse(res, edges);
-      } catch {
+      } catch (err) {
+        console.error('[knowledge] links:', err instanceof Error ? err.message : err);
         jsonResponse(res, []);
       }
       return true;
@@ -258,10 +282,9 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
       if (entryPath) {
         const entry = readEntry(memoryDir, entryPath);
 
-        // Record access and enrich with score data
+        // Enrich with score data (no recordAccess — only MCP reads count)
         try {
           const scoring = getEntryScoring();
-          scoring.recordAccess(entryPath);
           const score = scoring.getScore(entryPath);
           const enriched = {
             ...entry,
@@ -272,7 +295,8 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
             maturity_multiplier: maturityMultiplier(score?.maturity ?? 'candidate'),
           };
           jsonResponse(res, enriched);
-        } catch {
+        } catch (err) {
+          console.error('[knowledge] entry enrichment:', err instanceof Error ? err.message : err);
           jsonResponse(res, entry);
         }
         return true;
@@ -285,10 +309,12 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
       const maxResults = url.searchParams.get('max_results');
       const ranked = url.searchParams.get('ranked') !== 'false';
       const project = url.searchParams.get('project') || undefined;
+      const semantic = url.searchParams.get('semantic') === 'true';
       const results = await searchSessions(q, {
         role: role as 'user' | 'assistant' | 'all',
         maxResults: maxResults ? parseInt(maxResults, 10) : 20,
         ranked,
+        semantic,
         project,
       });
       jsonResponse(res, results);
@@ -310,7 +336,13 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
 
     if (pathname === '/api/sessions') {
       const project = url.searchParams.get('project') || undefined;
-      const sessions = listSessions(project);
+      const limitParam = url.searchParams.get('limit');
+      const offsetParam = url.searchParams.get('offset');
+      const limit = limitParam ? Math.min(parseInt(limitParam, 10), 500) : undefined;
+      const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+      let sessions = listSessions(project);
+      if (offset > 0) sessions = sessions.slice(offset);
+      if (limit !== undefined) sessions = sessions.slice(0, limit);
       jsonResponse(res, sessions);
       return true;
     }
@@ -385,7 +417,16 @@ function wsBroadcast(data: unknown): void {
   }
 }
 
+// State snapshot cache — avoid rescanning disk + querying 544MB vector DB on every WS connect
+let _stateCache: { data: object; timestamp: number } | null = null;
+const STATE_CACHE_TTL = 30_000; // 30 seconds
+
 async function buildStateSnapshot(): Promise<object> {
+  const now = Date.now();
+  if (_stateCache && now - _stateCache.timestamp < STATE_CACHE_TTL) {
+    return _stateCache.data;
+  }
+
   const config = getConfig();
   try {
     const knowledge = listEntries(config.memoryDir);
@@ -395,15 +436,21 @@ async function buildStateSnapshot(): Promise<object> {
       sessionCount += getSessionFiles(proj.path).length;
     }
 
-    let vectorCount = 0;
-    try {
-      const store = new VectorStore();
-      vectorCount = store.stats().totalEntries;
-    } catch {
-      /* vector store may not be ready */
+    // Vector count is expensive (544MB DB) — only fetch it if cache is empty
+    let vectorCount = _stateCache
+      ? (((_stateCache.data as Record<string, unknown>).stats as Record<string, number>)
+          ?.vector_count ?? 0)
+      : 0;
+    if (!_stateCache) {
+      try {
+        const store = new VectorStore();
+        vectorCount = store.stats().totalEntries;
+      } catch (err) {
+        console.error('[knowledge] vector store stats:', err instanceof Error ? err.message : err);
+      }
     }
 
-    return {
+    const data = {
       type: 'state',
       knowledge: knowledge || [],
       stats: {
@@ -414,7 +461,11 @@ async function buildStateSnapshot(): Promise<object> {
         version: VERSION,
       },
     };
-  } catch {
+
+    _stateCache = { data, timestamp: now };
+    return data;
+  } catch (err) {
+    console.error('[knowledge] state snapshot:', err instanceof Error ? err.message : err);
     return {
       type: 'state',
       knowledge: [],
@@ -429,8 +480,14 @@ async function buildStateSnapshot(): Promise<object> {
   }
 }
 
+// Invalidate state cache on knowledge writes
+export function invalidateStateCache(): void {
+  _stateCache = null;
+}
+
 export async function notifyUpdate(): Promise<void> {
   if (wsClients.size === 0) return;
+  invalidateStateCache(); // Force refresh on next snapshot
   const state = await buildStateSnapshot();
   wsBroadcast(state);
 }
@@ -513,8 +570,8 @@ export function startDashboard(port?: number): Promise<http.Server> {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify(state));
         }
-      } catch {
-        // non-fatal
+      } catch (err) {
+        console.error('[knowledge] ws init:', err instanceof Error ? err.message : err);
       }
     });
 
@@ -549,8 +606,8 @@ export function startDashboard(port?: number): Promise<http.Server> {
           }
         });
       }
-    } catch {
-      // file watching not available on this platform — non-fatal
+    } catch (err) {
+      console.error('[knowledge] file watcher:', err instanceof Error ? err.message : err);
     }
 
     server.on('close', () => {

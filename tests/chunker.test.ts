@@ -92,6 +92,11 @@ describe('chunkKnowledge', () => {
       'Content four.';
     const chunks = chunkKnowledge(text);
     expect(chunks.length).toBeGreaterThanOrEqual(1);
+    const combined = chunks.map((c) => c.text).join(' ');
+    expect(combined).toContain('Content one');
+    expect(combined).toContain('Content two');
+    expect(combined).toContain('Content three');
+    expect(combined).toContain('Content four');
   });
 });
 
@@ -130,7 +135,6 @@ describe('chunkSession', () => {
   it('includes metadata with role', () => {
     const messages: SessionMessage[] = [{ role: 'user', text: 'Hello' }];
     const chunks = chunkSession(messages);
-    expect(chunks[0].metadata).toBeDefined();
     expect(chunks[0].metadata!.role).toBe('user');
   });
 
@@ -170,14 +174,13 @@ describe('chunkSession', () => {
     }
   });
 
-  it('split long messages include part in metadata', () => {
+  it('split long messages include sequential part numbers in metadata', () => {
     const longText = 'word '.repeat(1000);
     const messages: SessionMessage[] = [{ role: 'user', text: longText }];
     const chunks = chunkSession(messages, 200);
     expect(chunks.length).toBeGreaterThan(1);
-    for (const chunk of chunks) {
-      expect(chunk.metadata).toBeDefined();
-      expect(typeof chunk.metadata!.part).toBe('number');
+    for (let i = 0; i < chunks.length; i++) {
+      expect(chunks[i].metadata!.part).toBe(i);
     }
   });
 

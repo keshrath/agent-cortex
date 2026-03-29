@@ -40,7 +40,7 @@ graph TB
 ```
 src/
   index.ts              Entry point — MCP stdio + dashboard auto-start
-  server.ts             16 tool definitions, request routing, error handling
+  server.ts             6 tool definitions, request routing, error handling
   dashboard.ts          HTTP + WebSocket server, REST API, file watcher
   types.ts              KnowledgeConfig interface, getConfig()
   knowledge/
@@ -49,6 +49,8 @@ src/
     git.ts              git pull/push/sync with execSync + timeouts
     graph.ts            Knowledge graph — edges table, link/unlink/BFS traversal
     scoring.ts          Confidence/decay scoring — entry_scores table, auto-promotion
+    consolidate.ts      Memory consolidation — TF-IDF duplicate detection, cluster grouping
+    reflect.ts          Reflection cycle — surfaces unconnected entries, generates prompts
   sessions/
     parser.ts           Multi-format parsing with mtime cache + adapter dispatch
     search.ts           TF-IDF ranked search with 60s global index cache
@@ -122,6 +124,8 @@ CREATE TABLE edges (
 - **links()** — list edges for a given entry or rel_type
 - **traverse()** — BFS from a starting entry to configurable depth, returns nodes and edges visited
 
+All four operations are exposed via the single `knowledge_graph` tool with an `action` parameter (`link`, `unlink`, `list`, `traverse`).
+
 **Auto-linking**: On `knowledge_write`, the top-3 most similar existing entries are found via cosine similarity against the vector store. Entries with similarity > 0.7 get automatic `related_to` edges created.
 
 ## Confidence & Decay Scoring
@@ -156,6 +160,30 @@ finalScore = baseRelevance * 0.5^(daysSinceLastAccess / 90) * maturityMultiplier
 | `proven`      | 20+      | 1.5x       |
 
 Access count increments on `knowledge_read`. Maturity transitions happen automatically when thresholds are crossed. Search results from `knowledge_search` apply the decay formula to blend relevance with freshness and confidence.
+
+## Memory Consolidation
+
+### consolidate.ts
+
+Detects near-duplicate knowledge entries using TF-IDF similarity scoring.
+
+**`checkDuplicates()`** — called after `knowledge_write`. Builds a TF-IDF index from all entries, queries with the written content, and returns entries exceeding a configurable similarity threshold (default: 0.6). Warnings are included in the write response.
+
+**`consolidate()`** — batch scan for `knowledge_consolidate`. Computes pairwise TF-IDF similarities for all entries in a category (or globally), groups entries above threshold (default: 0.5) into clusters using union-find, and returns clusters with representative entries and pairwise similarity scores.
+
+## Reflection Cycle
+
+### reflect.ts
+
+Surfaces unconnected knowledge entries and prepares structured prompts for agent-driven graph enrichment.
+
+**`reflect()`** — reads all entries, queries the knowledge graph for edges, identifies entries with zero connections, and generates a structured markdown prompt listing:
+
+1. Unconnected entries with titles, categories, tags, and 300-char content summaries
+2. Connected entries as potential link targets
+3. Instructions for the agent to call `knowledge_link` with suggested relationships
+
+Does NOT call an LLM — the calling agent processes the prompt in its own context and makes `knowledge_graph(action: "link")` calls based on its analysis.
 
 ## Session Module
 

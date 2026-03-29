@@ -196,7 +196,8 @@ describe('distillSessions', () => {
     ]);
 
     const result = await distillSessions();
-    expect(result.created.length + result.updated.length).toBeGreaterThanOrEqual(0);
+    // Session with meaningful content should produce at least one new project entry
+    expect(result.created.length + result.updated.length).toBeGreaterThanOrEqual(1);
   });
 
   it('respects the distill cursor to avoid reprocessing', async () => {

@@ -144,6 +144,8 @@ export function recencyDecay(timestamp: string | null, halfLifeDays: number = 30
 export class TfIdfIndex {
   private docs: Map<string, DocEntry> = new Map();
   private docFreq: Map<string, number> = new Map();
+  // Inverted index: term → set of doc IDs (for fast candidate lookup)
+  private invertedIndex: Map<string, Set<string>> = new Map();
   private totalDocs: number = 0;
 
   addDocument(id: string, text: string): void {
@@ -153,8 +155,10 @@ export class TfIdfIndex {
         const count = this.docFreq.get(term) ?? 0;
         if (count <= 1) {
           this.docFreq.delete(term);
+          this.invertedIndex.delete(term);
         } else {
           this.docFreq.set(term, count - 1);
+          this.invertedIndex.get(term)?.delete(id);
         }
       }
       this.totalDocs--;
@@ -171,6 +175,10 @@ export class TfIdfIndex {
 
     for (const term of termFreqs.keys()) {
       this.docFreq.set(term, (this.docFreq.get(term) ?? 0) + 1);
+      if (!this.invertedIndex.has(term)) {
+        this.invertedIndex.set(term, new Set());
+      }
+      this.invertedIndex.get(term)!.add(id);
     }
 
     this.totalDocs++;
@@ -184,8 +192,31 @@ export class TfIdfIndex {
 
     const results: Array<{ id: string; score: number }> = [];
 
-    for (const [id, doc] of this.docs) {
-      let score = 0;
+    // Pre-compute query vector magnitude for cosine normalization
+    let queryMag = 0;
+    for (const term of queryTokens) {
+      const docsWithTerm = this.docFreq.get(term) ?? 0;
+      if (docsWithTerm === 0) continue;
+      const idf = Math.log(1 + this.totalDocs / docsWithTerm);
+      queryMag += idf * idf;
+    }
+    queryMag = Math.sqrt(queryMag) || 1;
+
+    // Use inverted index: only visit documents containing at least one query term
+    const candidates = new Set<string>();
+    for (const term of queryTokens) {
+      const posting = this.invertedIndex.get(term);
+      if (posting) {
+        for (const docId of posting) candidates.add(docId);
+      }
+    }
+
+    for (const id of candidates) {
+      const doc = this.docs.get(id);
+      if (!doc) continue;
+
+      let dotProduct = 0;
+      let docMag = 0;
 
       for (const term of queryTokens) {
         const termCount = doc.termFreqs.get(term) ?? 0;
@@ -195,8 +226,12 @@ export class TfIdfIndex {
         const docsWithTerm = this.docFreq.get(term) ?? 0;
         const idf = Math.log(1 + this.totalDocs / docsWithTerm);
 
-        score += tf * idf;
+        dotProduct += tf * idf;
+        docMag += tf * idf * (tf * idf);
       }
+
+      docMag = Math.sqrt(docMag) || 1;
+      const score = dotProduct / (queryMag * docMag);
 
       if (score > 0) {
         results.push({ id, score });
@@ -215,6 +250,7 @@ export class TfIdfIndex {
   clear(): void {
     this.docs.clear();
     this.docFreq.clear();
+    this.invertedIndex.clear();
     this.totalDocs = 0;
   }
 }

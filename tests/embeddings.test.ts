@@ -23,10 +23,23 @@ describe('getEmbeddingConfig', () => {
     const config = getEmbeddingConfig();
     expect(config.provider).toBe('local');
     expect(config.alpha).toBeCloseTo(0.3);
+    // With no env vars, API keys and model override should all be absent
+    expect(config).not.toHaveProperty('openaiApiKey', expect.any(String));
     expect(config.openaiApiKey).toBeUndefined();
+    expect(config).not.toHaveProperty('anthropicApiKey', expect.any(String));
     expect(config.anthropicApiKey).toBeUndefined();
+    expect(config).not.toHaveProperty('geminiApiKey', expect.any(String));
     expect(config.geminiApiKey).toBeUndefined();
     expect(config.modelOverride).toBeUndefined();
+    // Verify the full default config shape
+    expect(config).toEqual({
+      provider: 'local',
+      alpha: expect.closeTo(0.3),
+      openaiApiKey: undefined,
+      anthropicApiKey: undefined,
+      geminiApiKey: undefined,
+      modelOverride: undefined,
+    });
   });
 
   it('reads provider from KNOWLEDGE_EMBEDDING_PROVIDER', async () => {

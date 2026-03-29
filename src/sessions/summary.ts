@@ -168,7 +168,8 @@ function fastMeta(filePath: string): SessionMeta | null {
           first = parsed;
           break;
         }
-      } catch {
+      } catch (err) {
+        console.error('[knowledge] parse head line:', err instanceof Error ? err.message : err);
         continue;
       }
     }
@@ -176,7 +177,8 @@ function fastMeta(filePath: string): SessionMeta | null {
       // Fallback: use the very first parseable line even without timestamp
       try {
         first = JSON.parse(headLines[0]) as Record<string, unknown>;
-      } catch {
+      } catch (err) {
+        console.error('[knowledge] parse fallback line:', err instanceof Error ? err.message : err);
         fs.closeSync(fd);
         return null;
       }
@@ -197,7 +199,8 @@ function fastMeta(filePath: string): SessionMeta | null {
             last = parsed;
             break;
           }
-        } catch {
+        } catch (err) {
+          console.error('[knowledge] parse tail line:', err instanceof Error ? err.message : err);
           continue;
         }
       }

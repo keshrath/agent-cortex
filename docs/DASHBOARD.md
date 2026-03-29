@@ -24,6 +24,11 @@ Card grid of knowledge entries. Each card shows:
 
 Category filter chips at the top: All, Projects, People, Decisions, Workflows, Notes. Search bar for filtering entries by title.
 
+**Header action buttons:**
+
+- **Duplicates** — scans all entries for near-duplicates using TF-IDF similarity. Entries in duplicate clusters get a warning icon on their card. Opens a side panel showing clusters with pairwise similarity scores. Click any entry in a cluster to view it.
+- **Reflect** — finds entries with no graph connections. Opens a side panel listing unconnected entries with content summaries and instructions for creating new links.
+
 Click a card to open the side panel with rendered markdown content, score details, and related entries.
 
 ## Search Tab
@@ -111,6 +116,8 @@ File watcher monitors `src/ui/` for `.html`, `.css`, `.js` changes. On change, b
 | GET    | `/api/knowledge/search?q=`              | Search knowledge             |
 | GET    | `/api/knowledge/:path`                  | Read entry (with score data) |
 | GET    | `/api/knowledge/:path/links`            | Graph edges for entry        |
+| GET    | `/api/knowledge/consolidate?threshold=` | Duplicate cluster analysis   |
+| GET    | `/api/knowledge/reflect?max_entries=`   | Unconnected entries + prompt |
 | GET    | `/api/sessions`                         | List sessions                |
 | GET    | `/api/sessions/search?q=&role=&ranked=` | Search sessions              |
 | GET    | `/api/sessions/recall?scope=&q=`        | Scoped recall                |

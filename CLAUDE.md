@@ -6,7 +6,7 @@ Layered architecture — single `server.ts` handles MCP tools, separate `dashboa
 
 ```
 src/
-  server.ts             MCP server, 16 tool definitions, request routing
+  server.ts             MCP server, 6 tool definitions, request routing
   dashboard.ts          HTTP + WebSocket server, REST API, file watcher
   index.ts              Entry point (MCP stdio + dashboard auto-start)
   types.ts              KnowledgeConfig (dataDir, sessionsDir, extraSessionRoots), getConfig(), persisted config
@@ -19,6 +19,8 @@ src/
     distill.ts          Session auto-distillation with secrets scrubbing
     graph.ts            Knowledge graph — edges table, link/unlink/traverse (BFS)
     scoring.ts          Confidence/decay scoring — entry_scores table, auto-promotion
+    consolidate.ts      Memory consolidation — TF-IDF duplicate detection, cluster grouping
+    reflect.ts          Reflection cycle — surfaces unconnected entries, generates prompts
   sessions/
     parser.ts           Multi-format session parsing with mtime-based cache
     indexer.ts           Background indexing for sessions
@@ -89,7 +91,7 @@ npm run dev        # watch mode (tsc --watch)
 
 ## Key APIs
 
-- **MCP** (16 tools): `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_search`, `knowledge_recall`, `knowledge_sessions`, `knowledge_summary`, `knowledge_sync`, `knowledge_config`, `knowledge_index_status`, `knowledge_get`, `knowledge_link`, `knowledge_unlink`, `knowledge_links`, `knowledge_graph`
+- **MCP** (6 tools): `knowledge` (actions: list/read/write/delete/sync), `knowledge_search` (general + scoped recall via `scope` param), `knowledge_session` (actions: list/get/summary), `knowledge_graph` (actions: link/unlink/list/traverse), `knowledge_analyze` (actions: consolidate/reflect), `knowledge_admin` (actions: status/config)
 - **Dashboard**: HTTP + WebSocket at port 3423, REST API for entries/sessions/search
 - **Git sync**: Auto pull/push on write, manual sync via `knowledge_sync`
 

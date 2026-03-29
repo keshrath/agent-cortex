@@ -195,7 +195,7 @@ async function hybridSearch(
   return results.slice(0, maxResults);
 }
 
-// ── TF-IDF ranked search ────────────────────────────────────────────────────
+// ── TF-IDF ranked search with index cache ─────────────────────────────────
 
 interface DocRef {
   project: string;
@@ -206,12 +206,33 @@ interface DocRef {
   sessionDate: string;
 }
 
-function rankedSearch(
-  query: string,
+interface IndexCache {
+  index: TfIdfIndex;
+  docMap: Map<string, DocRef>;
+  timestamp: number;
+  projectHash: string;
+  role: string;
+}
+
+let _indexCache: IndexCache | null = null;
+const INDEX_TTL = 60_000; // 60 seconds
+
+function getOrBuildIndex(
   projects: Array<{ name: string; path: string }>,
   role: string,
-  maxResults: number,
-): SearchResult[] {
+): { index: TfIdfIndex; docMap: Map<string, DocRef> } {
+  const projectHash = projects.map((p) => p.name).join(',');
+  const now = Date.now();
+
+  if (
+    _indexCache &&
+    now - _indexCache.timestamp < INDEX_TTL &&
+    _indexCache.projectHash === projectHash &&
+    _indexCache.role === role
+  ) {
+    return _indexCache;
+  }
+
   const index = new TfIdfIndex();
   const docMap = new Map<string, DocRef>();
   let docCounter = 0;
@@ -245,7 +266,18 @@ function rankedSearch(
     }
   }
 
-  const ranked = index.search(query, maxResults * 2); // over-fetch before decay reranking
+  _indexCache = { index, docMap, timestamp: now, projectHash, role };
+  return _indexCache;
+}
+
+function rankedSearch(
+  query: string,
+  projects: Array<{ name: string; path: string }>,
+  role: string,
+  maxResults: number,
+): SearchResult[] {
+  const { index, docMap } = getOrBuildIndex(projects, role);
+  const ranked = index.search(query, maxResults * 2);
 
   const results = ranked
     .map(({ id, score }) => {
@@ -273,7 +305,6 @@ function rankedSearch(
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
-  // Re-sort by adjusted score and trim
   results.sort((a, b) => b.score - a.score);
   return results.slice(0, maxResults);
 }

@@ -49,7 +49,8 @@ export function parseSessionFile(filePath: string): SessionEntry[] {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, 'utf-8');
-  } catch {
+  } catch (err) {
+    console.error('[knowledge] read session file:', err instanceof Error ? err.message : err);
     return [];
   }
 
@@ -59,8 +60,8 @@ export function parseSessionFile(filePath: string): SessionEntry[] {
   for (const line of lines) {
     try {
       entries.push(JSON.parse(line));
-    } catch {
-      // skip malformed lines gracefully
+    } catch (err) {
+      console.error('[knowledge] parse session line:', err instanceof Error ? err.message : err);
     }
   }
 
@@ -261,7 +262,8 @@ export function getProjectDirs(): Array<{ name: string; path: string }> {
     let subdirs: fs.Dirent[];
     try {
       subdirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
-    } catch {
+    } catch (err) {
+      console.error('[knowledge] read session root:', err instanceof Error ? err.message : err);
       continue;
     }
 
@@ -288,8 +290,8 @@ export function getProjectDirs(): Array<{ name: string; path: string }> {
           });
           addedAny = true;
         }
-      } catch {
-        // skip unreadable dirs
+      } catch (err) {
+        console.error('[knowledge] read session subdir:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -303,8 +305,8 @@ export function getProjectDirs(): Array<{ name: string; path: string }> {
             path: root,
           });
         }
-      } catch {
-        // skip
+      } catch (err) {
+        console.error('[knowledge] read flat root:', err instanceof Error ? err.message : err);
       }
     }
   }
@@ -313,8 +315,8 @@ export function getProjectDirs(): Array<{ name: string; path: string }> {
   for (const adapter of getAvailableAdapters()) {
     try {
       results.push(...adapter.discoverProjects());
-    } catch {
-      // skip failed adapters silently
+    } catch (err) {
+      console.error('[knowledge] adapter discover:', err instanceof Error ? err.message : err);
     }
   }
 

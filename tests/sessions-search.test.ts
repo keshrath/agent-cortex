@@ -113,10 +113,10 @@ describe('searchSessions', () => {
     expect(results.length).toBeGreaterThan(0);
     const r = results[0];
     expect(r.source).toBe('session');
-    expect(typeof r.id).toBe('string');
-    expect(typeof r.project).toBe('string');
-    expect(typeof r.excerpt).toBe('string');
-    expect(typeof r.score).toBe('number');
+    expect(r.id).toMatch(/^sess-/);
+    expect(r.project).toBe('my-project');
+    expect(r.excerpt).toMatch(/TypeScript/i);
+    expect(r.score).toBeGreaterThan(0);
   });
 
   it('filters by role (user only)', async () => {
@@ -172,7 +172,11 @@ describe('searchSessions', () => {
 
   it('regex mode handles special characters gracefully', async () => {
     const results = await searchSessions('test[invalid(regex', { ranked: false, semantic: false });
-    expect(Array.isArray(results)).toBe(true);
+    // Should not throw; may return empty or results but must be a valid array
+    expect(results).toEqual(expect.any(Array));
+    for (const r of results) {
+      expect(r.score).toBeDefined();
+    }
   });
 
   it('regex mode respects role filter', async () => {
@@ -193,11 +197,10 @@ describe('searchSessions', () => {
     expect(results.length).toBeLessThanOrEqual(1);
   });
 
-  it('regex mode includes excerpts', async () => {
+  it('regex mode includes excerpts containing the search term', async () => {
     const results = await searchSessions('TypeScript', { ranked: false, semantic: false });
-    if (results.length > 0) {
-      expect(results[0].excerpt.length).toBeGreaterThan(0);
-    }
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].excerpt).toMatch(/TypeScript/i);
   });
 
   // ── Semantic fallback ──────────────────────────────────────────────────
@@ -208,8 +211,9 @@ describe('searchSessions', () => {
     expect(results[0].score).toBeGreaterThan(0);
   });
 
-  it('default behavior does not crash when no vector store exists', async () => {
+  it('default behavior returns results when no vector store exists', async () => {
     const results = await searchSessions('TypeScript');
-    expect(Array.isArray(results)).toBe(true);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].score).toBeGreaterThan(0);
   });
 });

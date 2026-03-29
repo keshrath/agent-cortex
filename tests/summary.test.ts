@@ -19,6 +19,7 @@ describe('FILE_PATH_RE extraction', () => {
 
   it('extracts src/foo.ts style paths', () => {
     const paths = extractPaths('Modified src/server.ts and src/types.ts');
+    expect(paths).toHaveLength(2);
     expect(paths).toContain('src/server.ts');
     expect(paths).toContain('src/types.ts');
   });
@@ -30,6 +31,7 @@ describe('FILE_PATH_RE extraction', () => {
 
   it('extracts Python paths', () => {
     const paths = extractPaths('Updated app/models/user.py');
+    expect(paths).toHaveLength(1);
     expect(paths).toContain('app/models/user.py');
   });
 
@@ -40,6 +42,7 @@ describe('FILE_PATH_RE extraction', () => {
 
   it('extracts nested paths', () => {
     const paths = extractPaths('Look at src/knowledge/store.ts');
+    expect(paths).toHaveLength(1);
     expect(paths).toContain('src/knowledge/store.ts');
   });
 });

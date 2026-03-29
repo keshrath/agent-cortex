@@ -80,14 +80,10 @@ export function searchKnowledge(
       });
     }
 
-    // Record access for returned entries
-    if (entryPaths.length > 0) {
-      scoring.recordBulkAccess(entryPaths);
-    }
-
-    // Re-sort by final score
-    results.sort((a, b) => b.score - a.score);
-    return results;
+    // Filter out negative scores and re-sort by final score
+    const filtered = results.filter((r) => r.score > 0);
+    filtered.sort((a, b) => b.score - a.score);
+    return filtered;
   }
 
   // Fallback: regex search for exact phrase matches

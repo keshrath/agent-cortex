@@ -159,6 +159,17 @@ describe('KnowledgeGraph', () => {
       const result = graph.graph('a.md', 3);
       expect(result.nodes.length).toBe(2);
     });
+
+    it('terminates on cycle A→B→C→A', () => {
+      graph.link('a.md', 'b.md', 'related_to');
+      graph.link('b.md', 'c.md', 'depends_on');
+      graph.link('c.md', 'a.md', 'builds_on');
+      const result = graph.graph('a.md', 10);
+      expect(result.nodes.length).toBe(3);
+      expect(result.edges.length).toBe(3);
+      const nodePaths = result.nodes.map((n) => n.path).sort();
+      expect(nodePaths).toEqual(['a.md', 'b.md', 'c.md']);
+    });
   });
 
   describe('getRelated', () => {

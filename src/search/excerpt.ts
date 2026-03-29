@@ -17,7 +17,8 @@ export function buildExcerpt(
   let idx: number;
   try {
     idx = text.search(new RegExp(query, caseSensitive ? '' : 'i'));
-  } catch {
+  } catch (err) {
+    console.error('[knowledge] excerpt regex:', err instanceof Error ? err.message : err);
     const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     idx = text.search(new RegExp(escaped, caseSensitive ? '' : 'i'));
   }

@@ -38,7 +38,10 @@ async function loadPipeline(model: string): Promise<PipelineFn | null> {
       },
     } as Record<string, unknown>);
     console.error(`[knowledge] Embedding model loaded (threads: ${_numThreads})`);
-    return pipe as unknown as PipelineFn;
+    if (!pipe || typeof pipe !== 'function') {
+      throw new Error('Failed to load transformer pipeline');
+    }
+    return pipe as PipelineFn;
   } catch (err) {
     console.error(`[knowledge] Failed to load embedding model ${model}:`, err);
     return null;

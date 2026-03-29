@@ -112,43 +112,31 @@ describe('scopedSearch', () => {
     cleanup(tmpDir);
   });
 
-  it('filters errors scope correctly', async () => {
-    const results = await scopedSearch('errors', 'null reference', { semantic: false });
-    expect(results.length).toBeGreaterThanOrEqual(1);
-    // Should include error-related messages
-    const allExcerpts = results.map((r) => r.excerpt).join(' ');
-    expect(allExcerpts.toLowerCase()).toMatch(/error|typeerror|null/i);
-  });
+  it.each([
+    { scope: 'errors' as const, query: 'null reference', expectMatch: /error|typeerror|null/i },
+    { scope: 'plans' as const, query: 'roadmap', expectMatch: /roadmap|plan|step/i },
+    { scope: 'configs' as const, query: 'tsconfig', expectMatch: /tsconfig|package\.json/i },
+    { scope: 'files' as const, query: 'server', expectMatch: /server|src/i },
+    { scope: 'decisions' as const, query: 'PostgreSQL', expectMatch: /postgresql|decided/i },
+    { scope: 'all' as const, query: 'null', expectMatch: /null/i },
+  ])(
+    'filters $scope scope and returns matching excerpts for "$query"',
+    async ({ scope, query, expectMatch }) => {
+      const results = await scopedSearch(scope, query, { semantic: false });
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      const allExcerpts = results.map((r) => r.excerpt).join(' ');
+      expect(allExcerpts).toMatch(expectMatch);
+      for (const r of results) {
+        expect(r.metadata?.scope).toBe(scope);
+      }
+    },
+  );
 
-  it('filters plans scope correctly', async () => {
-    const results = await scopedSearch('plans', 'roadmap', { semantic: false });
-    expect(results.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('filters configs scope correctly', async () => {
-    const results = await scopedSearch('configs', 'tsconfig', { semantic: false });
-    expect(results.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('filters tools scope (tool_use and tool_result)', async () => {
+  it('filters tools scope and tags results with correct metadata', async () => {
     const results = await scopedSearch('tools', 'Read', { semantic: false });
-    // tools scope filters by role, so results come from tool_use/tool_result entries
-    expect(Array.isArray(results)).toBe(true);
-  });
-
-  it('filters files scope correctly', async () => {
-    const results = await scopedSearch('files', 'server', { semantic: false });
-    expect(results.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('filters decisions scope correctly', async () => {
-    const results = await scopedSearch('decisions', 'PostgreSQL', { semantic: false });
-    expect(results.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('all scope returns results from all messages', async () => {
-    const results = await scopedSearch('all', 'null', { semantic: false });
-    expect(results.length).toBeGreaterThanOrEqual(1);
+    for (const r of results) {
+      expect(r.metadata?.scope).toBe('tools');
+    }
   });
 
   it('returns empty results when query has no matches', async () => {
@@ -178,17 +166,15 @@ describe('scopedSearch', () => {
 
   it('includes metadata with scope info', async () => {
     const results = await scopedSearch('errors', 'TypeError', { semantic: false });
-    if (results.length > 0) {
-      expect(results[0].metadata).toBeDefined();
-      expect(results[0].metadata!.scope).toBe('errors');
-    }
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].metadata!.scope).toBe('errors');
   });
 
   it('semantic: true falls back gracefully when no embeddings available', async () => {
     const results = await scopedSearch('all', 'TypeError', { semantic: true });
-    expect(Array.isArray(results)).toBe(true);
-    if (results.length > 0) {
-      expect(results[0].score).toBeGreaterThan(0);
-    }
+    // Should fall back to TF-IDF and still find matches
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].score).toBeGreaterThan(0);
+    expect(results[0].excerpt.toLowerCase()).toContain('typeerror');
   });
 });

@@ -90,16 +90,18 @@ describe('searchKnowledge', () => {
     expect(results.length).toBeLessThanOrEqual(1);
   });
 
-  it('includes excerpts in results', () => {
+  it('includes excerpts containing the search term', () => {
     const results = searchKnowledge(tmpDir, 'typescript');
     expect(results.length).toBeGreaterThan(0);
-    expect(results[0].excerpt).toBeTruthy();
-    expect(results[0].excerpt.length).toBeGreaterThan(0);
+    expect(results[0].excerpt.toLowerCase()).toContain('typescript');
   });
 
   it('handles special regex characters in query gracefully', () => {
     const results = searchKnowledge(tmpDir, 'test[invalid(regex');
-    // Should not throw, may return results or not
-    expect(Array.isArray(results)).toBe(true);
+    // Should not throw; returns empty or results but never crashes
+    expect(results).toEqual(expect.any(Array));
+    for (const r of results) {
+      expect(r.score).toBeGreaterThanOrEqual(0);
+    }
   });
 });

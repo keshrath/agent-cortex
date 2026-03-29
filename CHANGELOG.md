@@ -1,15 +1,88 @@
 # Changelog
 
+## 1.3.0 (2026-03-29)
+
+### Further Tool Consolidation (11 → 6)
+
+Reduced MCP tool count from 11 to 6 by merging remaining individual tools into action-based interfaces.
+
+- **`knowledge`** (was 5 tools: `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_sync`) — actions: `list`, `read`, `write`, `delete`, `sync`
+- **`knowledge_search`** now handles scoped recall too — when `scope` is provided (errors, plans, configs, tools, files, decisions), behaves as the former `knowledge_recall`
+
+### MCP Tools (6)
+
+**Knowledge (1):** `knowledge` (actions: list, read, write, delete, sync)
+
+**Search (1):** `knowledge_search` (general search + scoped recall via `scope` param)
+
+**Sessions (1):** `knowledge_session` (actions: list, get, summary)
+
+**Knowledge Graph (1):** `knowledge_graph` (actions: link, unlink, list, traverse)
+
+**Analysis (1):** `knowledge_analyze` (actions: consolidate, reflect)
+
+**Admin (1):** `knowledge_admin` (actions: status, config)
+
+## 1.3.0 (2026-03-29)
+
+### Tool Consolidation (18 → 11)
+
+Reduced MCP tool count from 18 to 11 by merging related tools into action-based interfaces. All functionality is preserved — tools are routed by the `action` parameter.
+
+- **`knowledge_graph`** (was 4 tools: `knowledge_link`, `knowledge_unlink`, `knowledge_links`, `knowledge_graph`) — actions: `link`, `unlink`, `list`, `traverse`
+- **`knowledge_session`** (was 3 tools: `knowledge_sessions`, `knowledge_get`, `knowledge_summary`) — actions: `list`, `get`, `summary`
+- **`knowledge_analyze`** (was 2 tools: `knowledge_consolidate`, `knowledge_reflect`) — actions: `consolidate`, `reflect`
+- **`knowledge_admin`** (was 2 tools: `knowledge_index_status`, `knowledge_config`) — actions: `status`, `config`
+
+### MCP Tools (11)
+
+**Knowledge (5):** `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_sync`
+
+**Knowledge Graph (1):** `knowledge_graph` (actions: link, unlink, list, traverse)
+
+**Sessions (3):** `knowledge_session` (actions: list, get, summary), `knowledge_search`, `knowledge_recall`
+
+**Analysis (1):** `knowledge_analyze` (actions: consolidate, reflect)
+
+**Admin (1):** `knowledge_admin` (actions: status, config)
+
+## 1.3.0 (2026-03-29)
+
+### Memory Consolidation / Dedup
+
+`knowledge_write` now checks for near-duplicate entries using TF-IDF similarity after writing. If any existing entry exceeds a 0.6 similarity threshold, a warning is included in the response with paths and scores.
+
+- **`knowledge_analyze(action: "consolidate")`** — scans entries in a category (or all), groups near-duplicates into clusters using TF-IDF similarity > 0.5 (configurable), returns clusters with pairwise similarity scores. Read-only analysis.
+- **Dashboard**: "Duplicates" button in Knowledge tab header triggers consolidation scan. Entries in duplicate clusters show a warning icon. Clicking opens a panel with cluster details and similarity scores.
+
+### Reflection Cycle
+
+- **`knowledge_analyze(action: "reflect")`** — finds knowledge entries with zero graph edges and prepares a structured prompt for the agent's LLM to identify new connections. Returns unconnected entries with content summaries, connected entries as potential link targets, and a ready-to-use prompt.
+- Does NOT call an LLM itself — the agent processes the prompt and calls `knowledge_graph(action: "link")` based on the analysis.
+- **Dashboard**: "Reflect" button in Knowledge tab header shows unconnected entries in a panel with summaries and suggested instructions.
+
+### MCP Tools (11)
+
+**Knowledge (5):** `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_sync`
+
+**Knowledge Graph (1):** `knowledge_graph` (actions: link, unlink, list, traverse)
+
+**Sessions (3):** `knowledge_session` (actions: list, get, summary), `knowledge_search`, `knowledge_recall`
+
+**Analysis (1):** `knowledge_analyze` (actions: consolidate, reflect)
+
+**Admin (1):** `knowledge_admin` (actions: status, config)
+
 ## 1.2.0 (2026-03-29)
 
 ### Knowledge Graph
 
 New relationship layer for connecting knowledge entries. Edges are stored in a dedicated `edges` SQLite table with 8 typed relationships: `related_to`, `supersedes`, `depends_on`, `contradicts`, `specializes`, `part_of`, `alternative_to`, `builds_on`.
 
-- **`knowledge_link`** — create or update a weighted edge between two entries
-- **`knowledge_unlink`** — remove edges (optionally filtered by relationship type)
-- **`knowledge_links`** — list edges for an entry or relationship type
-- **`knowledge_graph`** — BFS traversal from a starting entry to configurable depth
+- **`knowledge_graph(action: "link")`** — create or update a weighted edge between two entries
+- **`knowledge_graph(action: "unlink")`** — remove edges (optionally filtered by relationship type)
+- **`knowledge_graph(action: "list")`** — list edges for an entry or relationship type
+- **`knowledge_graph(action: "traverse")`** — BFS traversal from a starting entry to configurable depth
 - **`knowledge_read`** now shows related entries alongside content
 
 ### Confidence & Decay Scoring
@@ -27,15 +100,15 @@ finalScore = baseRelevance * 0.5^(daysSinceLastAccess / 90) * maturityMultiplier
 
 `knowledge_write` now automatically finds the top-3 most similar existing entries via cosine similarity and creates `related_to` edges for any pair scoring above 0.7. This builds the knowledge graph organically as entries are added.
 
-### MCP Tools (16)
+### MCP Tools (11)
 
 **Knowledge (5):** `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_sync`
 
-**Knowledge Graph (4):** `knowledge_link`, `knowledge_unlink`, `knowledge_links`, `knowledge_graph`
+**Knowledge Graph (1):** `knowledge_graph` (actions: link, unlink, list, traverse)
 
-**Sessions (5):** `knowledge_sessions`, `knowledge_search`, `knowledge_get`, `knowledge_summary`, `knowledge_recall`
+**Sessions (3):** `knowledge_session` (actions: list, get, summary), `knowledge_search`, `knowledge_recall`
 
-**Admin (2):** `knowledge_index_status`, `knowledge_config`
+**Admin (1):** `knowledge_admin` (actions: status, config)
 
 ## 1.1.1 (2026-03-28)
 
@@ -79,13 +152,13 @@ Removed Claude Code-specific language throughout. agent-knowledge is now fully c
 
 Initial release.
 
-### MCP Tools (12)
+### MCP Tools (11)
 
 **Knowledge (5):** `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_sync`
 
-**Sessions (5):** `knowledge_sessions`, `knowledge_search`, `knowledge_get`, `knowledge_summary`, `knowledge_recall`
+**Sessions (3):** `knowledge_session` (actions: list, get, summary), `knowledge_search`, `knowledge_recall`
 
-**Admin (2):** `knowledge_index_status`, `knowledge_config`
+**Admin (1):** `knowledge_admin` (actions: status, config)
 
 ### Search Engine
 
@@ -109,7 +182,7 @@ Initial release.
 - 5 categories: projects, people, decisions, workflows, notes
 - YAML frontmatter for metadata (title, tags, updated)
 - Auto git commit + push on writes, pull on reads
-- Configurable git URL via `knowledge_config` tool or `KNOWLEDGE_GIT_URL` env var
+- Configurable git URL via `knowledge_admin(action: "config")` tool or `KNOWLEDGE_GIT_URL` env var
 - New repos auto-scaffolded with README, .gitignore, and category dirs
 
 ### Auto-Distillation
@@ -123,7 +196,7 @@ Initial release.
 
 ### Persistent Configuration
 
-- `knowledge_config` tool for runtime setup (no restart needed)
+- `knowledge_admin(action: "config")` for runtime setup (no restart needed)
 - Config stored at XDG/AppData location (tool-agnostic)
 - Priority: env vars > persisted config > defaults
 

@@ -42,6 +42,8 @@
   --purple-dim: rgba(110, 120, 168, 0.12);
   --blue: #0969da;
   --blue-dim: rgba(9, 105, 218, 0.12);
+  --warning: #9a6700;
+  --warning-dim: rgba(154, 103, 0, 0.12);
   --radius: 12px;
   --radius-sm: 8px;
   --radius-lg: 16px;
@@ -89,6 +91,8 @@
   --purple-dim: rgba(142, 154, 208, 0.15);
   --blue: #58a6ff;
   --blue-dim: rgba(88, 166, 255, 0.15);
+  --warning: #d29922;
+  --warning-dim: rgba(210, 153, 34, 0.15);
   --shadow-1: 0px 1px 2px 0px rgba(0, 0, 0, 0.6), 0px 1px 3px 1px rgba(0, 0, 0, 0.3);
   --shadow-2: 0px 1px 2px 0px rgba(0, 0, 0, 0.6), 0px 2px 6px 2px rgba(0, 0, 0, 0.3);
   --shadow-3: 0px 1px 3px 0px rgba(0, 0, 0, 0.6), 0px 4px 8px 3px rgba(0, 0, 0, 0.3);
@@ -851,6 +855,33 @@ h1 {
   white-space: nowrap;
 }
 
+/* ── Sessions Load More ───────────────────────────────────────────────── */
+.sessions-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.sessions-load-more.hidden {
+  display: none;
+}
+.sessions-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ── Filter Select ─────────────────────────────────────────────────────── */
 .filter-select {
   height: 32px;
@@ -1050,6 +1081,26 @@ h1 {
   outline-offset: 2px;
   border-radius: 8px;
   animation: highlight-fade 4s ease-out forwards;
+}
+
+/* Don't override user message background — white text becomes unreadable */
+.chat-msg.user.chat-msg-highlight {
+  animation: highlight-outline-fade 4s ease-out forwards;
+}
+
+@keyframes highlight-outline-fade {
+  0% {
+    outline-color: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  70% {
+    outline-color: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  100% {
+    outline-color: transparent;
+    box-shadow: none;
+  }
 }
 
 @keyframes highlight-fade {
@@ -1731,4 +1782,44 @@ h1 {
 ::selection {
   background: var(--accent-dim);
   color: var(--text);
+}
+
+/* ── Header Action Buttons ────────────────────────────────────────────── */
+.header-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition),
+    border-color var(--transition);
+}
+
+.header-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.header-action-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+
+/* ── Duplicate Warning ────────────────────────────────────────────────── */
+.knowledge-card.has-duplicates {
+  border-color: var(--warning);
+  box-shadow: 0 0 0 1px var(--warning-dim);
+}
+
+.duplicate-warn {
+  cursor: help;
 }
