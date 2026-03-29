@@ -26,10 +26,10 @@ import {
 } from './sessions/parser.js';
 import { getConfig, loadPersistedConfig, savePersistedConfig, getConfigLocation } from './types.js';
 
-const CATEGORIES = ['projects', 'people', 'decisions', 'workflows', 'notes'] as const;
+import { CATEGORIES } from './knowledge/store.js';
 const SCOPES = ['errors', 'plans', 'configs', 'tools', 'files', 'decisions', 'all'] as const;
 
-export { CATEGORIES, SCOPES };
+export { SCOPES };
 
 // ── Tool result types ────────────────────────────────────────────────────────
 

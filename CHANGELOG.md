@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1 (2026-03-30)
+
+### Changed
+
+- **DRY constants** — `CATEGORIES` now defined once in `knowledge/store.ts`, imported by `tool-handlers.ts` and `server.ts`
+- **Type-safe session parsing** — extracted `extractText()` helper in `parser.ts`, replacing 3 repeated unsafe `as unknown[]` cast blocks with a single type-guarded function
+- **Stale doc fix** — CLAUDE.md `knowledge_sync` → `knowledge(action: 'sync')`
+
 ## 1.3.0 (2026-03-29)
 
 ### Further Tool Consolidation (11 → 6)

@@ -5,8 +5,8 @@ import { RELATIONSHIP_TYPES } from './knowledge/graph.js';
 import { backgroundIndex } from './sessions/indexer.js';
 import { getConfig } from './types.js';
 import { getVersion } from './version.js';
-import { toolHandlers, validateArgs, err } from './tool-handlers.js';
-import { CATEGORIES, SCOPES } from './tool-handlers.js';
+import { toolHandlers, validateArgs, err, SCOPES } from './tool-handlers.js';
+import { CATEGORIES } from './knowledge/store.js';
 
 export interface ServerOptions {
   /** Only the leader instance (dashboard owner) runs background indexing. */

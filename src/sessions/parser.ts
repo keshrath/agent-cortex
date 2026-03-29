@@ -3,6 +3,30 @@ import path from 'path';
 import { getConfig } from '../types.js';
 import { getAvailableAdapters } from './adapters/index.js';
 
+// ── Text extraction helper ──────────────────────────────────────────────────
+
+interface TextPart {
+  type: string;
+  text?: string;
+}
+
+function isTextPart(p: unknown): p is TextPart {
+  return typeof p === 'object' && p !== null && 'type' in p && (p as TextPart).type === 'text';
+}
+
+/** Extract text from message content (string, array of strings/text parts, or unknown). */
+function extractText(content: unknown): string | null {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const parts = content
+      .filter((p: unknown) => typeof p === 'string' || isTextPart(p))
+      .map((p: unknown) => (typeof p === 'string' ? p : (p as TextPart).text))
+      .filter(Boolean) as string[];
+    return parts.length > 0 ? parts.join('\n') : null;
+  }
+  return null;
+}
+
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
 export interface SessionEntry {
@@ -84,51 +108,12 @@ export function extractMessages(entries: SessionEntry[]): SessionMessage[] {
     const entryType = entry.type ?? entry.role;
 
     if (entryType === 'user' && entry.message?.content) {
-      // Handle both string content and array of {type:"text", text:"..."} objects
-      let content: string;
-      if (typeof entry.message.content === 'string') {
-        content = entry.message.content;
-      } else if (Array.isArray(entry.message.content)) {
-        const textParts = (entry.message.content as unknown[])
-          .filter(
-            (p: unknown) =>
-              typeof p === 'string' ||
-              (typeof p === 'object' &&
-                p !== null &&
-                'type' in p &&
-                (p as { type: string }).type === 'text'),
-          )
-          .map((p: unknown) => (typeof p === 'string' ? p : (p as { text?: string }).text))
-          .filter(Boolean);
-        content =
-          textParts.length > 0 ? textParts.join('\n') : JSON.stringify(entry.message.content);
-      } else {
-        content = JSON.stringify(entry.message.content);
-      }
+      const content = extractText(entry.message.content) ?? JSON.stringify(entry.message.content);
       messages.push({ role: 'user', content, timestamp: ts });
     } else if (entryType === 'assistant' && entry.message?.content) {
-      const parts = Array.isArray(entry.message.content)
-        ? entry.message.content
-        : [entry.message.content];
-
-      const textParts = parts
-        .filter(
-          (p: unknown) =>
-            typeof p === 'string' ||
-            (typeof p === 'object' &&
-              p !== null &&
-              'type' in p &&
-              (p as { type: string }).type === 'text'),
-        )
-        .map((p: unknown) => (typeof p === 'string' ? p : (p as { text?: string }).text))
-        .filter(Boolean);
-
-      if (textParts.length > 0) {
-        messages.push({
-          role: 'assistant',
-          content: textParts.join('\n'),
-          timestamp: ts,
-        });
+      const content = extractText(entry.message.content);
+      if (content) {
+        messages.push({ role: 'assistant', content, timestamp: ts });
       }
     } else if (entryType === 'tool_use' || entryType === 'tool_result') {
       const content =
@@ -179,25 +164,7 @@ export function getSessionMeta(entries: SessionEntry[]): SessionMeta {
     branch: first?.gitBranch ?? 'unknown',
     messageCount: entries.length,
     userMessageCount: userMessages.length,
-    preview:
-      typeof firstUserMsg === 'string'
-        ? firstUserMsg.substring(0, 200)
-        : Array.isArray(firstUserMsg)
-          ? (
-              (firstUserMsg as unknown[])
-                .filter(
-                  (p: unknown) =>
-                    typeof p === 'string' ||
-                    (typeof p === 'object' &&
-                      p !== null &&
-                      'type' in p &&
-                      (p as { type: string }).type === 'text'),
-                )
-                .map((p: unknown) => (typeof p === 'string' ? p : (p as { text?: string }).text))
-                .filter(Boolean)
-                .join('\n') || 'N/A'
-            ).substring(0, 200)
-          : 'N/A',
+    preview: (extractText(firstUserMsg) ?? 'N/A').substring(0, 200),
   };
 }
 
