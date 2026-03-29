@@ -40,6 +40,8 @@
     knowledgeGrid: $('knowledge-grid'),
     knowledgeEmpty: $('knowledge-empty'),
     knowledgeCategories: $('knowledge-categories'),
+    knowledgeSearchInput: $('knowledge-search-input'),
+    knowledgeSearchResults: $('knowledge-search-results'),
     searchInput: $('search-input'),
     searchResults: $('search-results'),
     searchEmpty: $('search-empty'),
@@ -396,11 +398,17 @@
           .join('');
         const time = relativeTime(entry.updated || entry.created);
 
+        const maturity = entry.maturity || 'candidate';
+        const accessCount = entry.access_count || 0;
+
         return `<div class="knowledge-card" data-path="${esc(entry.path || entry.id || '')}" tabindex="0" role="button">
-        <span class="card-category" data-cat="${esc(cat)}">
-          <span class="material-symbols-outlined" style="font-size:14px">${icon}</span>
-          ${esc(cat)}
-        </span>
+        <div class="card-header-row">
+          <span class="card-category" data-cat="${esc(cat)}">
+            <span class="material-symbols-outlined" style="font-size:14px">${icon}</span>
+            ${esc(cat)}
+          </span>
+          <span class="maturity-badge" data-maturity="${esc(maturity)}">${esc(maturity)}${accessCount > 0 ? ` <span class="maturity-reads">&middot; ${accessCount} reads</span>` : ''}</span>
+        </div>
         ${time ? `<span class="card-date">${time}</span>` : ''}
         <div class="card-title">${esc(title)}</div>
         ${tags ? `<div class="card-tags">${tags}</div>` : ''}
@@ -419,13 +427,95 @@
   async function openKnowledgePanel(path) {
     if (!path) return;
     try {
-      const data = await api(`/knowledge/${encodeURIComponent(path)}`);
+      const [entryRes, linksRes] = await Promise.allSettled([
+        api(`/knowledge/${encodeURIComponent(path)}`),
+        api(`/knowledge/${encodeURIComponent(path)}/links`),
+      ]);
+      const data = entryRes.status === 'fulfilled' ? entryRes.value : {};
+      const links = linksRes.status === 'fulfilled' ? linksRes.value : [];
       const title = data.title || data.path || path;
       const content = data.content || data.body || '';
-      openPanel('knowledge', { title, content, meta: data });
+      openPanel('knowledge', { title, content, meta: data, links, entryPath: path });
     } catch (err) {
       toast(`Failed to load entry: ${err.message}`, 'error');
     }
+  }
+
+  // ── Knowledge Search ───────────────────────────────────────────────────────
+
+  const doKnowledgeSearch = debounce(async () => {
+    const q = (el.knowledgeSearchInput ? el.knowledgeSearchInput.value : '').trim();
+    if (!q) {
+      el.knowledgeSearchResults.style.display = 'none';
+      el.knowledgeGrid.style.display = '';
+      el.knowledgeEmpty.classList.add('hidden');
+      renderKnowledge();
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ q, max_results: '20' });
+      const cat = state.knowledge.activeCategory;
+      if (cat !== 'all') params.set('category', cat);
+      const results = await api(`/knowledge/search?${params}`);
+      renderKnowledgeSearchResults(Array.isArray(results) ? results : [], q);
+    } catch (err) {
+      toast(`Knowledge search failed: ${err.message}`, 'error');
+    }
+  }, 300);
+
+  function renderKnowledgeSearchResults(results, query) {
+    if (results.length === 0) {
+      el.knowledgeSearchResults.style.display = 'none';
+      el.knowledgeGrid.style.display = 'none';
+      el.knowledgeEmpty.classList.remove('hidden');
+      el.knowledgeEmpty.querySelector('.empty-text').textContent = 'No results found';
+      el.knowledgeEmpty.querySelector('.empty-hint').textContent =
+        `No knowledge entries match "${query}"`;
+      return;
+    }
+
+    el.knowledgeEmpty.classList.add('hidden');
+    el.knowledgeGrid.style.display = 'none';
+    el.knowledgeSearchResults.style.display = '';
+    el.knowledgeSearchResults.innerHTML = results
+      .map((r) => {
+        const title = r.title || r.path || '';
+        const excerpt = r.excerpt || '';
+        const score = r.score;
+        const maturity = r.maturity || 'candidate';
+        const accessCount = r.access_count || 0;
+        const decayF = r.decay_factor;
+        const matMult = r.maturity_multiplier;
+        const path = r.path || '';
+
+        let scoreBreakdown = '';
+        if (score != null) {
+          const parts = [];
+          parts.push(`relevance: ${score.toFixed(2)}`);
+          if (decayF != null) parts.push(`decay: ${decayF.toFixed(2)}`);
+          if (matMult != null) parts.push(`maturity: x${matMult.toFixed(1)}`);
+          const finalScore = score * (decayF || 1) * (matMult || 1);
+          scoreBreakdown = `<div class="score-breakdown">Score: ${finalScore.toFixed(2)} (${parts.join(' \u00d7 ')})</div>`;
+        }
+
+        return `<div class="result-item knowledge-result-item" data-path="${esc(path)}" tabindex="0" role="button">
+          <div class="result-meta">
+            <span class="maturity-badge" data-maturity="${esc(maturity)}">${esc(maturity)}${accessCount > 0 ? ` <span class="maturity-reads">&middot; ${accessCount} reads</span>` : ''}</span>
+            <span class="result-entry-title">${esc(title)}</span>
+            ${score != null ? `<span class="score-container">${formatScore(score, {})}</span>` : ''}
+          </div>
+          <div class="result-excerpt">${highlightExcerpt(excerpt, query)}</div>
+          ${scoreBreakdown}
+        </div>`;
+      })
+      .join('');
+
+    el.knowledgeSearchResults.querySelectorAll('.knowledge-result-item').forEach((card) => {
+      card.addEventListener('click', () => openKnowledgePanel(card.dataset.path));
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') openKnowledgePanel(card.dataset.path);
+      });
+    });
   }
 
   // ── Search ─────────────────────────────────────────────────────────────────
@@ -720,17 +810,52 @@
     const category = entry.category || meta.category || '';
     const tags = entry.tags || meta.tags || [];
     const updated = entry.updated || meta.updated || '';
+    const maturity = meta.maturity || 'candidate';
+    const accessCount = meta.access_count || 0;
 
     let metaHtml = '<div class="panel-meta">';
     if (category)
       metaHtml += `<span class="card-category" data-cat="${esc(category)}">${esc(category)}</span>`;
+    metaHtml += `<span class="maturity-badge" data-maturity="${esc(maturity)}">${esc(maturity)}${accessCount > 0 ? ` <span class="maturity-reads">&middot; ${accessCount} reads</span>` : ''}</span>`;
     if (tags.length)
       metaHtml += tags.map((t) => `<span class="card-tag">${esc(t)}</span>`).join('');
     if (updated) metaHtml += `<span class="panel-meta-date">${esc(updated)}</span>`;
     metaHtml += '</div>';
 
     const body = stripFrontmatter(data.content);
-    el.panelBody.innerHTML = metaHtml + `<div class="prose">${renderMd(body)}</div>`;
+    let html = metaHtml + `<div class="prose">${renderMd(body)}</div>`;
+
+    // Related entries section
+    const links = data.links || [];
+    if (links.length > 0) {
+      const entryPath = data.entryPath || '';
+      html += '<div class="panel-section related-section">';
+      html +=
+        '<h4 class="panel-section-title"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;margin-right:4px">hub</span>Related</h4>';
+      html += '<div class="related-entries">';
+      links.forEach((link) => {
+        const linkedPath = link.source === entryPath ? link.target : link.source;
+        const relType = link.rel_type || 'related_to';
+        const strength = link.strength != null ? link.strength : 0.5;
+        const linkedTitle = linkedPath.split('/').pop().replace(/\.md$/, '').replace(/[-_]/g, ' ');
+        html += `<div class="related-entry" data-path="${esc(linkedPath)}" tabindex="0" role="button">
+          <span class="rel-type-pill" data-rel="${esc(relType)}">${esc(relType.replace(/_/g, ' '))}</span>
+          <span class="related-entry-title">${esc(linkedTitle)}</span>
+          <span class="related-entry-strength" title="Strength: ${strength.toFixed(2)}">${(strength * 100).toFixed(0)}%</span>
+        </div>`;
+      });
+      html += '</div></div>';
+    }
+
+    el.panelBody.innerHTML = html;
+
+    // Bind click handlers on related entries
+    el.panelBody.querySelectorAll('.related-entry').forEach((entryEl) => {
+      entryEl.addEventListener('click', () => openKnowledgePanel(entryEl.dataset.path));
+      entryEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') openKnowledgePanel(entryEl.dataset.path);
+      });
+    });
   }
 
   function renderSessionPanel(data) {
@@ -858,6 +983,13 @@
       state.knowledge.activeCategory = chip.dataset.category;
       renderKnowledge();
     });
+
+    // Knowledge search input
+    if (el.knowledgeSearchInput) {
+      el.knowledgeSearchInput.addEventListener('input', () => {
+        doKnowledgeSearch();
+      });
+    }
 
     // Search input
     el.searchInput.addEventListener('input', () => {

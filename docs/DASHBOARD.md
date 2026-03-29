@@ -16,12 +16,15 @@ The dashboard runs at **http://localhost:3423** and auto-starts with the MCP ser
 Card grid of knowledge entries. Each card shows:
 
 - Category badge with color: projects (blue), people (purple), decisions (orange), workflows (green), notes (yellow)
+- **Maturity badge**: candidate (gray), established (blue), proven (green) — based on access frequency
 - Title and tag pills
 - Last updated date
 
-Category filter chips at the top: All, Projects, People, Decisions, Workflows, Notes.
+![Knowledge entries with maturity badges](assets/knowledge-maturity.png)
 
-Click a card to open the side panel with rendered markdown content.
+Category filter chips at the top: All, Projects, People, Decisions, Workflows, Notes. Search bar for filtering entries by title.
+
+Click a card to open the side panel with rendered markdown content, score details, and related entries.
 
 ## Search Tab
 
@@ -78,6 +81,8 @@ Results use the same format as the Search tab.
 - Width: 560px, resizable by dragging the left edge
 - Close: X button or press Escape
 - Knowledge entries: rendered as markdown via marked + DOMPurify + highlight.js
+- **Related entries**: linked entries shown with colored relationship-type pills (related_to, depends_on, supersedes, etc.) — clickable to navigate
+- **Score details**: maturity level, access count, decay factor, and maturity multiplier
 - Sessions: chat bubbles (user = right/accent, assistant = left/surface)
 
 ## Theming
@@ -100,17 +105,18 @@ File watcher monitors `src/ui/` for `.html`, `.css`, `.js` changes. On change, b
 
 ## REST API
 
-| Method | Endpoint                                | Description      |
-| ------ | --------------------------------------- | ---------------- |
-| GET    | `/api/knowledge`                        | List entries     |
-| GET    | `/api/knowledge/search?q=`              | Search knowledge |
-| GET    | `/api/knowledge/:path`                  | Read entry       |
-| GET    | `/api/sessions`                         | List sessions    |
-| GET    | `/api/sessions/search?q=&role=&ranked=` | Search sessions  |
-| GET    | `/api/sessions/recall?scope=&q=`        | Scoped recall    |
-| GET    | `/api/sessions/:id`                     | Read session     |
-| GET    | `/api/sessions/:id/summary`             | Session summary  |
-| GET    | `/health`                               | Health check     |
+| Method | Endpoint                                | Description                  |
+| ------ | --------------------------------------- | ---------------------------- |
+| GET    | `/api/knowledge`                        | List entries                 |
+| GET    | `/api/knowledge/search?q=`              | Search knowledge             |
+| GET    | `/api/knowledge/:path`                  | Read entry (with score data) |
+| GET    | `/api/knowledge/:path/links`            | Graph edges for entry        |
+| GET    | `/api/sessions`                         | List sessions                |
+| GET    | `/api/sessions/search?q=&role=&ranked=` | Search sessions              |
+| GET    | `/api/sessions/recall?scope=&q=`        | Scoped recall                |
+| GET    | `/api/sessions/:id`                     | Read session                 |
+| GET    | `/api/sessions/:id/summary`             | Session summary              |
+| GET    | `/health`                               | Health check                 |
 
 ## WebSocket
 

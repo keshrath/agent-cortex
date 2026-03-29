@@ -40,13 +40,15 @@ graph TB
 ```
 src/
   index.ts              Entry point — MCP stdio + dashboard auto-start
-  server.ts             12 tool definitions, request routing, error handling
+  server.ts             16 tool definitions, request routing, error handling
   dashboard.ts          HTTP + WebSocket server, REST API, file watcher
   types.ts              KnowledgeConfig interface, getConfig()
   knowledge/
     store.ts            CRUD for markdown entries with YAML frontmatter
     search.ts           TF-IDF search over knowledge entries
     git.ts              git pull/push/sync with execSync + timeouts
+    graph.ts            Knowledge graph — edges table, link/unlink/BFS traversal
+    scoring.ts          Confidence/decay scoring — entry_scores table, auto-promotion
   sessions/
     parser.ts           Multi-format parsing with mtime cache + adapter dispatch
     search.ts           TF-IDF ranked search with 60s global index cache
@@ -91,6 +93,69 @@ Wraps `execSync` for git operations with timeouts:
 ### search.ts
 
 Builds a TF-IDF index from all knowledge entries, searches with ranking, falls back to regex for exact phrases.
+
+## Knowledge Graph
+
+### graph.ts
+
+Manages typed, weighted edges between knowledge entries in a dedicated `edges` SQLite table.
+
+**Schema**:
+
+```sql
+CREATE TABLE edges (
+  source TEXT NOT NULL,
+  target TEXT NOT NULL,
+  rel_type TEXT NOT NULL,
+  strength REAL DEFAULT 1.0,
+  created TEXT NOT NULL,
+  PRIMARY KEY (source, target, rel_type)
+);
+```
+
+**8 relationship types**: `related_to`, `supersedes`, `depends_on`, `contradicts`, `specializes`, `part_of`, `alternative_to`, `builds_on`.
+
+**Operations**:
+
+- **link()** — upsert an edge (INSERT OR REPLACE), validates rel_type against allowed set
+- **unlink()** — delete edges, optionally filtered by rel_type
+- **links()** — list edges for a given entry or rel_type
+- **traverse()** — BFS from a starting entry to configurable depth, returns nodes and edges visited
+
+**Auto-linking**: On `knowledge_write`, the top-3 most similar existing entries are found via cosine similarity against the vector store. Entries with similarity > 0.7 get automatic `related_to` edges created.
+
+## Confidence & Decay Scoring
+
+### scoring.ts
+
+Tracks access frequency and recency for search result ranking via an `entry_scores` SQLite table.
+
+**Schema**:
+
+```sql
+CREATE TABLE entry_scores (
+  path TEXT PRIMARY KEY,
+  access_count INTEGER DEFAULT 0,
+  last_accessed TEXT NOT NULL,
+  maturity TEXT DEFAULT 'candidate'
+);
+```
+
+**Scoring formula**:
+
+```
+finalScore = baseRelevance * 0.5^(daysSinceLastAccess / 90) * maturityMultiplier
+```
+
+**Maturity auto-promotion**:
+
+| Stage         | Accesses | Multiplier |
+| ------------- | -------- | ---------- |
+| `candidate`   | < 5      | 0.5x       |
+| `established` | 5-19     | 1.0x       |
+| `proven`      | 20+      | 1.5x       |
+
+Access count increments on `knowledge_read`. Maturity transitions happen automatically when thresholds are crossed. Search results from `knowledge_search` apply the decay formula to blend relevance with freshness and confidence.
 
 ## Session Module
 

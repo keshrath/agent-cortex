@@ -2,6 +2,9 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { listEntries, readEntry, writeEntry, deleteEntry } from './knowledge/store.js';
 import { gitPull, gitPush, gitSync, ensureRepo } from './knowledge/git.js';
+import { getKnowledgeGraph, RELATIONSHIP_TYPES, type RelationshipType } from './knowledge/graph.js';
+import { getEntryScoring } from './knowledge/scoring.js';
+import { indexKnowledgeEntry } from './sessions/indexer.js';
 import { searchSessions } from './sessions/search.js';
 import { listSessions, getSessionSummary } from './sessions/summary.js';
 import { scopedSearch, type SearchScope } from './sessions/scopes.js';
@@ -364,6 +367,99 @@ export function createServer(options?: ServerOptions): Server {
           },
         },
       },
+      {
+        name: 'knowledge_link',
+        description:
+          'Create or update an edge between two knowledge entries in the knowledge graph. ' +
+          'Valid relationship types: related_to, supersedes, depends_on, contradicts, specializes, part_of, alternative_to, builds_on.',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            source: {
+              type: 'string',
+              description: "Source entry path, e.g. 'projects/my-project.md'",
+            },
+            target: {
+              type: 'string',
+              description: "Target entry path, e.g. 'decisions/architecture.md'",
+            },
+            rel_type: {
+              type: 'string',
+              enum: [...RELATIONSHIP_TYPES],
+              description: 'Relationship type',
+            },
+            strength: {
+              type: 'number',
+              description: 'Edge strength between 0 and 1 (default: 0.5)',
+            },
+          },
+          required: ['source', 'target', 'rel_type'],
+        },
+      },
+      {
+        name: 'knowledge_unlink',
+        description:
+          'Remove edge(s) between two knowledge entries. ' +
+          'If rel_type is omitted, removes all edges between source and target.',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            source: {
+              type: 'string',
+              description: 'Source entry path',
+            },
+            target: {
+              type: 'string',
+              description: 'Target entry path',
+            },
+            rel_type: {
+              type: 'string',
+              enum: [...RELATIONSHIP_TYPES],
+              description: 'Relationship type to remove (omit to remove all)',
+            },
+          },
+          required: ['source', 'target'],
+        },
+      },
+      {
+        name: 'knowledge_links',
+        description:
+          'List edges in the knowledge graph, optionally filtered by entry path and/or relationship type.',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            entry: {
+              type: 'string',
+              description: 'Filter edges connected to this entry path',
+            },
+            rel_type: {
+              type: 'string',
+              enum: [...RELATIONSHIP_TYPES],
+              description: 'Filter by relationship type',
+            },
+          },
+        },
+      },
+      {
+        name: 'knowledge_graph',
+        description:
+          'Traverse the knowledge graph via BFS from a starting entry. ' +
+          'Returns all nodes and edges within the specified depth (default: 2 hops).',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            entry: {
+              type: 'string',
+              description: 'Starting entry path for BFS traversal',
+            },
+            depth: {
+              type: 'number',
+              description: 'Maximum traversal depth in hops (default: 2)',
+            },
+          },
+          required: ['entry'],
+        },
+      },
     ],
   }));
 
@@ -386,20 +482,67 @@ export function createServer(options?: ServerOptions): Server {
           const entryPath = requireString(a, 'path');
           await gitPull(config.memoryDir);
           const result = readEntry(config.memoryDir, entryPath);
-          return ok(result);
+
+          // Record access for scoring
+          const scoring = getEntryScoring();
+          const scoreInfo = scoring.recordAccess(entryPath);
+
+          // Get 1-hop related entries from graph
+          const graph = getKnowledgeGraph();
+          const related = graph.getRelated(entryPath);
+
+          return ok({ ...result, score: scoreInfo, related });
         }
 
         case 'knowledge_write': {
           const category = requireString(a, 'category');
           const filename = requireString(a, 'filename');
-          const content = requireString(a, 'content');
-          if (content.length > 1_000_000) {
+          const writeContent = requireString(a, 'content');
+          if (writeContent.length > 1_000_000) {
             return err('Content too large (max 1MB)');
           }
           await gitPull(config.memoryDir);
-          const filePath = writeEntry(config.memoryDir, category, filename, content);
+          const filePath = writeEntry(config.memoryDir, category, filename, writeContent);
           const pushResult = await gitPush(config.memoryDir);
-          return ok({ path: filePath, git: pushResult });
+
+          // Index the entry for embeddings
+          const autoLinks: Array<{ target: string; similarity: number }> = [];
+          try {
+            await indexKnowledgeEntry(filePath, writeContent);
+
+            // Auto-link: find similar entries via vector search
+            const { getEmbeddingProvider } = await import('./embeddings/index.js');
+            const provider = await getEmbeddingProvider();
+            if (provider) {
+              const queryVector = await provider.embedOne(writeContent.slice(0, 2000));
+              const vecStore = new VectorStore();
+              const similar = vecStore.searchBySource(queryVector, 'knowledge', 4);
+              const graphStore = getKnowledgeGraph();
+
+              for (const hit of similar) {
+                if (hit.sourceId === filePath) continue;
+                if (hit.score > 0.7) {
+                  graphStore.link(filePath, hit.sourceId, 'related_to', hit.score);
+                  autoLinks.push({
+                    target: hit.sourceId,
+                    similarity: Math.round(hit.score * 100) / 100,
+                  });
+                }
+                if (autoLinks.length >= 3) break;
+              }
+            }
+          } catch (linkErr) {
+            console.error('[knowledge] Auto-link failed:', linkErr);
+          }
+
+          const response: Record<string, unknown> = { path: filePath, git: pushResult };
+          if (autoLinks.length > 0) {
+            response.autoLinked = autoLinks;
+            response.autoLinkMessage =
+              'Auto-linked to: ' +
+              autoLinks.map((l) => l.target + ' (' + l.similarity + ')').join(', ');
+          }
+          return ok(response);
         }
 
         case 'knowledge_delete': {
@@ -558,6 +701,50 @@ export function createServer(options?: ServerOptions): Server {
             configFile: getConfigLocation(),
             note: 'Config stored at a tool-agnostic location. Env vars override persisted config.',
           });
+        }
+
+        case 'knowledge_link': {
+          const source = requireString(a, 'source');
+          const target = requireString(a, 'target');
+          const relType = requireString(a, 'rel_type');
+          validateEnum(relType, RELATIONSHIP_TYPES, 'rel_type');
+          const strength = optionalNumber(a, 'strength', 0, 1) ?? 0.5;
+          const graphStore = getKnowledgeGraph();
+          const edge = graphStore.link(source, target, relType as RelationshipType, strength);
+          return ok(edge);
+        }
+
+        case 'knowledge_unlink': {
+          const source = requireString(a, 'source');
+          const target = requireString(a, 'target');
+          const relType = validateEnum(
+            optionalString(a, 'rel_type'),
+            RELATIONSHIP_TYPES,
+            'rel_type',
+          ) as RelationshipType | undefined;
+          const graphStore = getKnowledgeGraph();
+          const removed = graphStore.unlink(source, target, relType);
+          return ok({ removed });
+        }
+
+        case 'knowledge_links': {
+          const entry = optionalString(a, 'entry');
+          const relType = validateEnum(
+            optionalString(a, 'rel_type'),
+            RELATIONSHIP_TYPES,
+            'rel_type',
+          ) as RelationshipType | undefined;
+          const graphStore = getKnowledgeGraph();
+          const edges = graphStore.links(entry, relType);
+          return ok(edges);
+        }
+
+        case 'knowledge_graph': {
+          const entry = requireString(a, 'entry');
+          const depth = optionalNumber(a, 'depth', 1, 10) ?? 2;
+          const graphStore = getKnowledgeGraph();
+          const graphResult = graphStore.graph(entry, depth);
+          return ok(graphResult);
         }
 
         default:

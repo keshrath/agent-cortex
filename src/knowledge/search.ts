@@ -1,4 +1,5 @@
 import { TfIdfIndex } from '../search/tfidf.js';
+import { getEntryScoring, computeFinalScore } from './scoring.js';
 import { buildExcerpt } from '../search/excerpt.js';
 import { listEntries, readEntry, KnowledgeEntry } from './store.js';
 
@@ -54,16 +55,38 @@ export function searchKnowledge(
 
   if (tfidfResults.length > 0) {
     const results: SearchResult[] = [];
+    const scoring = getEntryScoring();
+    const entryPaths = tfidfResults
+      .map((r) => documents.find((d) => d.entry.path === r.id)?.entry.path)
+      .filter((p): p is string => p !== undefined);
+    const scores = scoring.getScores(entryPaths);
+
     for (const result of tfidfResults) {
       const doc = documents.find((d) => d.entry.path === result.id);
       if (!doc) continue;
 
+      const scoreInfo = scores.get(doc.entry.path);
+      const maturity = (scoreInfo?.maturity ?? 'candidate') as
+        | 'candidate'
+        | 'established'
+        | 'proven';
+      const lastAccessed = scoreInfo?.last_accessed ?? null;
+      const finalScore = computeFinalScore(result.score, lastAccessed, maturity);
+
       results.push({
         entry: doc.entry,
-        score: result.score,
+        score: finalScore,
         excerpt: buildExcerpt(doc.content, query, { caseSensitive, contextAfter: 200 }),
       });
     }
+
+    // Record access for returned entries
+    if (entryPaths.length > 0) {
+      scoring.recordBulkAccess(entryPaths);
+    }
+
+    // Re-sort by final score
+    results.sort((a, b) => b.score - a.score);
     return results;
   }
 

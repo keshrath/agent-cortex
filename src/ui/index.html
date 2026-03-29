@@ -140,6 +140,18 @@
               <span class="material-symbols-outlined chip-icon">sticky_note_2</span>Notes
             </button>
           </div>
+          <div class="search-bar knowledge-search-bar">
+            <span class="material-symbols-outlined search-input-icon">search</span>
+            <input
+              type="search"
+              id="knowledge-search-input"
+              class="search-input"
+              placeholder="Search knowledge entries..."
+              autocomplete="off"
+              aria-label="Search knowledge entries"
+            />
+          </div>
+          <div id="knowledge-search-results" class="results-list" style="display: none"></div>
           <div id="knowledge-grid" class="card-grid"></div>
           <div id="knowledge-empty" class="empty-state hidden">
             <span class="material-symbols-outlined empty-icon">folder_off</span>

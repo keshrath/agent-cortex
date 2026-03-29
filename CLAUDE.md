@@ -6,7 +6,7 @@ Layered architecture — single `server.ts` handles MCP tools, separate `dashboa
 
 ```
 src/
-  server.ts             MCP server, 12 tool definitions, request routing
+  server.ts             MCP server, 16 tool definitions, request routing
   dashboard.ts          HTTP + WebSocket server, REST API, file watcher
   index.ts              Entry point (MCP stdio + dashboard auto-start)
   types.ts              KnowledgeConfig (dataDir, sessionsDir, extraSessionRoots), getConfig(), persisted config
@@ -17,6 +17,8 @@ src/
     search.ts           TF-IDF search over knowledge entries with regex fallback
     git.ts              git pull/push/sync with timeouts
     distill.ts          Session auto-distillation with secrets scrubbing
+    graph.ts            Knowledge graph — edges table, link/unlink/traverse (BFS)
+    scoring.ts          Confidence/decay scoring — entry_scores table, auto-promotion
   sessions/
     parser.ts           Multi-format session parsing with mtime-based cache
     indexer.ts           Background indexing for sessions
@@ -87,7 +89,7 @@ npm run dev        # watch mode (tsc --watch)
 
 ## Key APIs
 
-- **MCP** (12 tools): `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_search`, `knowledge_recall`, `knowledge_sessions`, `knowledge_summary`, `knowledge_sync`, `knowledge_config`, `knowledge_index_status`, `knowledge_get`
+- **MCP** (16 tools): `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_search`, `knowledge_recall`, `knowledge_sessions`, `knowledge_summary`, `knowledge_sync`, `knowledge_config`, `knowledge_index_status`, `knowledge_get`, `knowledge_link`, `knowledge_unlink`, `knowledge_links`, `knowledge_graph`
 - **Dashboard**: HTTP + WebSocket at port 3423, REST API for entries/sessions/search
 - **Git sync**: Auto pull/push on write, manual sync via `knowledge_sync`
 
@@ -110,6 +112,9 @@ Additional roots: `EXTRA_SESSION_ROOTS` env var (comma-separated). New tools: im
 - Categories: `projects`, `people`, `decisions`, `workflows`, `notes`
 - Search: hybrid semantic (embeddings) + TF-IDF with fuzzy fallback
 - Session search scopes: `errors`, `plans`, `configs`, `tools`, `files`, `decisions`, `all`
+- Knowledge graph: typed edges between entries (8 relationship types), BFS traversal via `knowledge_graph`
+- Confidence/decay scoring: search ranking weighted by access frequency and recency (candidate->established->proven)
+- Auto-linking: `knowledge_write` auto-creates `related_to` edges for top-3 similar entries (cosine > 0.7)
 
 ## Commit Messages
 

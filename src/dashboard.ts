@@ -4,6 +4,8 @@ import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { listEntries, readEntry } from './knowledge/store.js';
 import { searchKnowledge } from './knowledge/search.js';
+import { getEntryScoring, decayFactor, maturityMultiplier } from './knowledge/scoring.js';
+import { getKnowledgeGraph } from './knowledge/graph.js';
 import {
   getProjectDirs,
   getSessionFiles,
@@ -185,7 +187,28 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
         category,
         maxResults: maxResults ? parseInt(maxResults, 10) : undefined,
       });
-      jsonResponse(res, results);
+
+      // Enrich search results with score breakdown
+      try {
+        const scoring = getEntryScoring();
+        const paths = results.map((r) => r.entry.path);
+        const scores = scoring.getScores(paths);
+        const enriched = results.map((r) => {
+          const score = scores.get(r.entry.path);
+          const decay = score?.last_accessed ? decayFactor(score.last_accessed) : 1;
+          const matMult = maturityMultiplier(score?.maturity ?? 'candidate');
+          return {
+            ...r,
+            maturity: score?.maturity ?? 'candidate',
+            access_count: score?.access_count ?? 0,
+            decay_factor: decay,
+            maturity_multiplier: matMult,
+          };
+        });
+        jsonResponse(res, enriched);
+      } catch {
+        jsonResponse(res, results);
+      }
       return true;
     }
 
@@ -193,7 +216,40 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
       const category = url.searchParams.get('category') || undefined;
       const tag = url.searchParams.get('tag') || undefined;
       const entries = listEntries(memoryDir, category, tag);
-      jsonResponse(res, entries);
+
+      // Enrich entries with score data (maturity, access_count)
+      try {
+        const scoring = getEntryScoring();
+        const paths = entries.map((e) => e.path);
+        const scores = scoring.getScores(paths);
+        const enriched = entries.map((e) => {
+          const score = scores.get(e.path);
+          return {
+            ...e,
+            maturity: score?.maturity ?? 'candidate',
+            access_count: score?.access_count ?? 0,
+            last_accessed: score?.last_accessed ?? null,
+          };
+        });
+        jsonResponse(res, enriched);
+      } catch {
+        // Fallback: return entries without score data
+        jsonResponse(res, entries);
+      }
+      return true;
+    }
+
+    // Links endpoint must be matched before the generic /api/knowledge/:path
+    const linksMatch = pathname.match(/^\/api\/knowledge\/(.+)\/links$/);
+    if (linksMatch) {
+      const entryPath = decodeURIComponent(linksMatch[1]);
+      try {
+        const graph = getKnowledgeGraph();
+        const edges = graph.links(entryPath);
+        jsonResponse(res, edges);
+      } catch {
+        jsonResponse(res, []);
+      }
       return true;
     }
 
@@ -201,7 +257,24 @@ async function handleApi(pathname: string, url: URL, res: http.ServerResponse): 
       const entryPath = decodeURIComponent(pathname.slice('/api/knowledge/'.length));
       if (entryPath) {
         const entry = readEntry(memoryDir, entryPath);
-        jsonResponse(res, entry);
+
+        // Record access and enrich with score data
+        try {
+          const scoring = getEntryScoring();
+          scoring.recordAccess(entryPath);
+          const score = scoring.getScore(entryPath);
+          const enriched = {
+            ...entry,
+            maturity: score?.maturity ?? 'candidate',
+            access_count: score?.access_count ?? 0,
+            last_accessed: score?.last_accessed ?? null,
+            decay_factor: score?.last_accessed ? decayFactor(score.last_accessed) : 1,
+            maturity_multiplier: maturityMultiplier(score?.maturity ?? 'candidate'),
+          };
+          jsonResponse(res, enriched);
+        } catch {
+          jsonResponse(res, entry);
+        }
         return true;
       }
     }

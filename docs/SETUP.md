@@ -174,9 +174,9 @@ Hooks announce the dashboard URL on session start. Support varies by client.
 
 ### Claude Code Hooks
 
-#### SessionStart (`scripts/hooks/session-start.js`)
+#### SessionStart + SubagentStart (`scripts/hooks/session-start.js`)
 
-Announces the knowledge dashboard URL on session start.
+Announces the knowledge dashboard URL on session start. Also fires for subagents via `SubagentStart`, ensuring spawned agents know about the knowledge base.
 
 Add to `~/.claude/settings.json`:
 
@@ -184,6 +184,17 @@ Add to `~/.claude/settings.json`:
 {
   "hooks": {
     "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/path/to/agent-knowledge/scripts/hooks/session-start.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
       {
         "hooks": [
           {
@@ -236,12 +247,15 @@ Add these instructions:
 You have access to agent-knowledge MCP tools — a shared knowledge base synced via git.
 
 Available tools: knowledge_list, knowledge_read, knowledge_write, knowledge_search,
-knowledge_recall, knowledge_sessions, knowledge_config, knowledge_sync
+knowledge_recall, knowledge_sessions, knowledge_config, knowledge_sync,
+knowledge_link, knowledge_unlink, knowledge_links, knowledge_graph
 
 Categories: projects, people, decisions, workflows, notes
 
 Use knowledge_search for semantic + keyword search across all entries.
 Use knowledge_recall for scoped search (errors, plans, configs, tools, files, decisions).
+Use knowledge_link/knowledge_unlink to manage relationships between entries.
+Use knowledge_graph to explore connections from any entry via BFS traversal.
 
 Dashboard: http://localhost:3423
 ```

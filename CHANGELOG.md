@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.2.0 (2026-03-29)
+
+### Knowledge Graph
+
+New relationship layer for connecting knowledge entries. Edges are stored in a dedicated `edges` SQLite table with 8 typed relationships: `related_to`, `supersedes`, `depends_on`, `contradicts`, `specializes`, `part_of`, `alternative_to`, `builds_on`.
+
+- **`knowledge_link`** — create or update a weighted edge between two entries
+- **`knowledge_unlink`** — remove edges (optionally filtered by relationship type)
+- **`knowledge_links`** — list edges for an entry or relationship type
+- **`knowledge_graph`** — BFS traversal from a starting entry to configurable depth
+- **`knowledge_read`** now shows related entries alongside content
+
+### Confidence & Decay Scoring
+
+New `entry_scores` SQLite table tracks access frequency and recency. Search results are ranked using:
+
+```
+finalScore = baseRelevance * 0.5^(daysSinceLastAccess / 90) * maturityMultiplier
+```
+
+- **Auto-promotion**: entries mature from candidate (0.5x) to established (1.0x) at 5 accesses, then to proven (1.5x) at 20 accesses
+- Frequently accessed entries rise in rankings; stale entries decay over time
+
+### Auto-linking on Write
+
+`knowledge_write` now automatically finds the top-3 most similar existing entries via cosine similarity and creates `related_to` edges for any pair scoring above 0.7. This builds the knowledge graph organically as entries are added.
+
+### MCP Tools (16)
+
+**Knowledge (5):** `knowledge_list`, `knowledge_read`, `knowledge_write`, `knowledge_delete`, `knowledge_sync`
+
+**Knowledge Graph (4):** `knowledge_link`, `knowledge_unlink`, `knowledge_links`, `knowledge_graph`
+
+**Sessions (5):** `knowledge_sessions`, `knowledge_search`, `knowledge_get`, `knowledge_summary`, `knowledge_recall`
+
+**Admin (2):** `knowledge_index_status`, `knowledge_config`
+
 ## 1.1.1 (2026-03-28)
 
 ### Bug Fixes
