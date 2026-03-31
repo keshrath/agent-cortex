@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { getConfig } from '../types.js';
 import { getAvailableAdapters } from './adapters/index.js';
@@ -191,21 +192,21 @@ export function getSessionMeta(entries: SessionEntry[]): SessionMeta {
  * Falls back to the raw name if it doesn't match the expected pattern.
  */
 function decodeProjectDirName(dirName: string): string {
+  const homeParts = os.homedir().replace(/\\/g, '/').split('/');
+  const homeEncoded = homeParts[0].replace(':', '') + '--' + homeParts.slice(1).join('-');
+
+  if (dirName === homeEncoded) return '~';
+
+  if (dirName.startsWith(homeEncoded + '--')) {
+    return dirName.slice(homeEncoded.length + 2).replace(/--/g, '/');
+  }
+
+  if (dirName.startsWith(homeEncoded + '-')) {
+    return dirName.slice(homeEncoded.length + 1).replace(/--/g, '/');
+  }
+
   const parts = dirName.split('--');
   if (parts.length < 2) return dirName;
-
-  if (!/^[A-Z]$/i.test(parts[0])) return dirName;
-
-  const homeIdx = parts.findIndex((p) => /^(users|home)-/i.test(p));
-
-  if (homeIdx >= 0 && homeIdx < parts.length - 1) {
-    return parts.slice(homeIdx + 1).join('/');
-  }
-
-  if (homeIdx >= 0 && homeIdx === parts.length - 1) {
-    return '~';
-  }
-
   return parts[parts.length - 1];
 }
 

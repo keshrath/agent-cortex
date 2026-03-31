@@ -14,6 +14,7 @@ import { consolidate } from './knowledge/consolidate.js';
 import { reflect } from './knowledge/reflect.js';
 import { indexKnowledgeEntry } from './sessions/indexer.js';
 import { searchSessions } from './sessions/search.js';
+import { searchKnowledge } from './knowledge/search.js';
 import { listSessions, getSessionSummary } from './sessions/summary.js';
 import { scopedSearch, type SearchScope } from './sessions/scopes.js';
 import { VectorStore } from './vectorstore/index.js';
@@ -253,8 +254,12 @@ export function handleKnowledgeSession(
   switch (action) {
     case 'list': {
       const project = optionalString(a, 'project');
-      const sessions = listSessions(project);
-      return ok(sessions);
+      const limit = optionalNumber(a, 'limit', 1, 500) ?? 20;
+      const offset = optionalNumber(a, 'offset', 0, 100000) ?? 0;
+      let sessions = listSessions(project);
+      const total = sessions.length;
+      sessions = sessions.slice(offset, offset + limit);
+      return ok({ total, offset, limit, sessions });
     }
     case 'get': {
       const sessionId = requireString(a, 'session_id');
@@ -323,18 +328,32 @@ export async function handleKnowledgeSearch(args: Record<string, unknown>): Prom
     return ok(results);
   }
 
-  // General search
+  // General search — sessions + knowledge entries
   const role =
     validateEnum(optionalString(a, 'role'), ['user', 'assistant', 'all'] as const, 'role') ?? 'all';
   const ranked = optionalBoolean(a, 'ranked') ?? true;
-  const results = await searchSessions(query, {
+  const sessionResults = await searchSessions(query, {
     project,
     role,
     maxResults,
     ranked,
     semantic,
   });
-  return ok(results);
+
+  const config = getConfig();
+  const knowledgeResults = searchKnowledge(config.memoryDir, query, { maxResults: 10 }).map(
+    (r) => ({
+      source: 'knowledge' as const,
+      id: r.entry.path,
+      path: r.entry.path,
+      category: r.entry.category,
+      title: r.entry.title || r.entry.path,
+      excerpt: r.excerpt,
+      score: r.score,
+    }),
+  );
+
+  return ok({ sessions: sessionResults, knowledge: knowledgeResults });
 }
 
 export function handleKnowledgeAdmin(args: Record<string, unknown>): ToolResult {

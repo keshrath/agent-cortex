@@ -68,10 +68,9 @@ export function createServer(options?: ServerOptions): Server {
       {
         name: 'knowledge_search',
         description:
-          'Hybrid semantic + TF-IDF search across session conversations. ' +
-          'Results ranked by blended relevance (semantic similarity + keyword match) x recency. ' +
-          'When "scope" is provided, searches within a specific domain (errors, plans, configs, tools, files, decisions). ' +
-          'Without scope, performs general search across all sessions.',
+          'Search across sessions AND knowledge entries. ' +
+          'Returns both session matches (semantic + TF-IDF) and knowledge base matches. ' +
+          'When "scope" is provided, searches within a specific domain (errors, plans, configs, tools, files, decisions) in sessions only.',
         inputSchema: {
           type: 'object' as const,
           properties: {
@@ -143,6 +142,14 @@ export function createServer(options?: ServerOptions): Server {
             tail: {
               type: 'number',
               description: 'Only return the last N messages (action=get)',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max sessions to return (action=list, default: 20, max: 500)',
+            },
+            offset: {
+              type: 'number',
+              description: 'Skip first N sessions (action=list, default: 0)',
             },
           },
           required: ['action'],

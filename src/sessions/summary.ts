@@ -207,24 +207,31 @@ function fastMeta(filePath: string): SessionMeta | null {
     }
     fs.closeSync(fd);
 
+    const extractText = (content: unknown): string => {
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        const parts = content
+          .filter(
+            (p) =>
+              typeof p === 'string' || (typeof p === 'object' && p !== null && p.type === 'text'),
+          )
+          .map((p) => (typeof p === 'string' ? p : p.text));
+        return parts.length > 0 ? parts.join('\n') : '';
+      }
+      return '';
+    };
+
     let preview = '';
+    let userMessageCount = 0;
     for (const line of headLines) {
       try {
         const entry = JSON.parse(line);
-        if (entry.type === 'user' && entry.message?.role === 'user') {
-          const content = entry.message.content;
-          if (typeof content === 'string') {
-            preview = content.substring(0, 200);
-            break;
-          }
-          if (Array.isArray(content)) {
-            const textBlock = content.find(
-              (b: { type: string; text?: string }) => b.type === 'text' && b.text,
-            );
-            if (textBlock) {
-              preview = textBlock.text.substring(0, 200);
-              break;
-            }
+        const role = entry.type ?? entry.role;
+        if (role === 'user') {
+          userMessageCount++;
+          if (!preview && entry.message?.content !== null && entry.message?.content !== undefined) {
+            const text = extractText(entry.message.content);
+            if (text) preview = text.substring(0, 200);
           }
         }
       } catch {
@@ -238,7 +245,7 @@ function fastMeta(filePath: string): SessionMeta | null {
       cwd: (first.cwd as string) || '',
       branch: (first.gitBranch as string) || '',
       messageCount: Math.max(1, Math.round(stat.size / 500)),
-      userMessageCount: 0,
+      userMessageCount,
       preview,
     };
   } catch {

@@ -234,31 +234,68 @@ Combine with `AGENTS.md` instructions (see below).
 
 ### Cursor and Windsurf
 
-Cursor and Windsurf don't support lifecycle hooks. Use the client's system prompt / instructions file:
+Cursor and Windsurf don't support lifecycle hooks. Use rules files instead:
 
-| Client   | Instructions file |
-| -------- | ----------------- |
-| Cursor   | `.cursorrules`    |
-| Windsurf | `.windsurfrules`  |
+| Client   | Rules location        |
+| -------- | --------------------- |
+| Cursor   | `.cursor/rules/*.mdc` |
+| Windsurf | `.windsurfrules`      |
 
-Add these instructions:
+#### Cursor Rules Setup
 
+Create `.cursor/rules/agent-mcp-stack.mdc` with "Always Apply" mode:
+
+```yaml
+---
+description: Agent MCP stack integration
+globs: *
+alwaysApply: true
+---
+
+# Agent MCP Stack
+
+## Default behavior in every chat
+
+Treat `agent-comm`, `agent-knowledge`, and `agent-tasks` as default infrastructure
+for this repository. Do not wait for the user to restate this.
+
+At the start of each new chat/session:
+
+1. Bootstrap `agent-comm` (`comm_register`, join `general`, send one-line intent, then `comm_inbox`).
+2. Use `agent-knowledge` first for recall/session context when it can help
+   (especially prior decisions, errors, tool usage, and related sessions).
+3. Check `agent-tasks` before creating work (`task_list`), and keep task
+   state/artifacts/comments current when work spans more than one step.
+
+If an MCP server is unavailable, report it briefly and continue with local tools;
+retry MCP usage after restoring connectivity.
 ```
-You have access to agent-knowledge MCP tools — a shared knowledge base synced via git.
 
-Available tools: knowledge_list, knowledge_read, knowledge_write, knowledge_search,
-knowledge_recall, knowledge_sessions, knowledge_config, knowledge_sync,
-knowledge_link, knowledge_unlink, knowledge_links, knowledge_graph
+Optionally create `.cursor/rules/session-wrapup-knowledge.mdc` for session wrap-up:
 
-Categories: projects, people, decisions, workflows, notes
+```yaml
+---
+description: Save session learnings to knowledge base
+globs: *
+alwaysApply: false
+---
 
-Use knowledge_search for semantic + keyword search across all entries.
-Use knowledge_recall for scoped search (errors, plans, configs, tools, files, decisions).
-Use knowledge_link/knowledge_unlink to manage relationships between entries.
-Use knowledge_graph to explore connections from any entry via BFS traversal.
+# Session Wrap-up
 
-Dashboard: http://localhost:3423
+Before ending a session, save non-obvious learnings to agent-knowledge:
+
+1. `knowledge_search` for existing entries that overlap with this session's work.
+2. `knowledge_write` new entries for decisions, architecture changes, or error patterns
+   that aren't already captured.
+3. `knowledge_link` related entries together.
+
+Categories: projects (project context), decisions (trade-offs made), workflows (processes),
+notes (everything else).
 ```
+
+#### Windsurf
+
+Add equivalent instructions to `.windsurfrules` in your project root.
 
 ---
 
@@ -457,11 +494,11 @@ If your session data is in a non-standard location, use `EXTRA_SESSION_ROOTS` to
 
 ## Client Comparison
 
-| Feature              | Claude Code | Cursor       | OpenCode      | Cline      | Continue.dev | Aider          | Windsurf       |
-| -------------------- | ----------- | ------------ | ------------- | ---------- | ------------ | -------------- | -------------- |
-| MCP stdio transport  | Yes         | Yes          | Yes           | Yes        | Yes          | --             | Yes            |
-| Session reading      | Yes (JSONL) | Yes (JSONL)  | Yes (SQLite)  | Yes (JSON) | Yes (JSON)   | Yes (MD/JSONL) | --             |
-| Lifecycle hooks      | Yes (JSON)  | No           | Yes (plugins) | No         | No           | --             | No             |
-| Session auto-distill | Yes         | Yes          | Yes           | Yes        | Yes          | Yes            | --             |
-| System prompt file   | CLAUDE.md   | .cursorrules | AGENTS.md     | --         | --           | --             | .windsurfrules |
-| REST API fallback    | Yes         | Yes          | Yes           | Yes        | Yes          | Yes            | Yes            |
+| Feature              | Claude Code | Cursor               | OpenCode      | Cline      | Continue.dev | Aider          | Windsurf       |
+| -------------------- | ----------- | -------------------- | ------------- | ---------- | ------------ | -------------- | -------------- |
+| MCP stdio transport  | Yes         | Yes                  | Yes           | Yes        | Yes          | --             | Yes            |
+| Session reading      | Yes (JSONL) | Yes (JSONL)          | Yes (SQLite)  | Yes (JSON) | Yes (JSON)   | Yes (MD/JSONL) | --             |
+| Lifecycle hooks      | Yes (JSON)  | No                   | Yes (plugins) | No         | No           | --             | No             |
+| Session auto-distill | Yes         | Yes                  | Yes           | Yes        | Yes          | Yes            | --             |
+| System prompt file   | CLAUDE.md   | .cursor/rules/\*.mdc | AGENTS.md     | --         | --           | --             | .windsurfrules |
+| REST API fallback    | Yes         | Yes                  | Yes           | Yes        | Yes          | Yes            | Yes            |
