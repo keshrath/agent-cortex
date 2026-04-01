@@ -74,8 +74,16 @@ const SECRET_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
     replacement: '[REDACTED_ENV_VAR]',
   },
 
-  // Base64-encoded blobs that look like secrets (long, no spaces)
-  { pattern: /\b[A-Za-z0-9+/]{64,}={0,2}\b/g, replacement: '[REDACTED_BASE64]' },
+  // Base64-encoded blobs after secret-related keywords, or with = padding
+  {
+    pattern:
+      /(?:key|secret|token|password|credential|authorization|private.key)\s*[:=]\s*["']?[A-Za-z0-9+/]{40,}={1,2}["']?/gi,
+    replacement: '[REDACTED_BASE64]',
+  },
+  {
+    pattern: /\b[A-Za-z0-9+/]{64,}={1,2}\b/g,
+    replacement: '[REDACTED_BASE64]',
+  },
 
   // Email addresses (privacy)
   {

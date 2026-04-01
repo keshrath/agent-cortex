@@ -28,6 +28,65 @@ const HEARTBEAT_INTERVAL = 30_000;
 const MAX_WS_CONNECTIONS = 50;
 const MAX_WS_MESSAGE_SIZE = 4096;
 
+// ── Rate limiter ──────────────────────────────────────────────────────────────
+
+const RATE_LIMIT_WINDOW = 60_000; // 60 seconds
+const RATE_LIMIT_MAX = 100; // max requests per window
+const RATE_LIMIT_MAX_HEAVY = 20; // max for search/analyze endpoints
+
+interface RateBucket {
+  count: number;
+  resetAt: number;
+}
+
+const rateBuckets = new Map<string, RateBucket>();
+const rateBucketsHeavy = new Map<string, RateBucket>();
+
+// Cleanup stale buckets every 5 minutes
+const cleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateBuckets) {
+    if (bucket.resetAt <= now) rateBuckets.delete(key);
+  }
+  for (const [key, bucket] of rateBucketsHeavy) {
+    if (bucket.resetAt <= now) rateBucketsHeavy.delete(key);
+  }
+}, 300_000);
+cleanupTimer.unref();
+
+function getClientIp(req: http.IncomingMessage): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
+function checkRateLimit(
+  bucketMap: Map<string, RateBucket>,
+  ip: string,
+  max: number,
+): { allowed: boolean; remaining: number; resetAt: number } {
+  const now = Date.now();
+  let bucket = bucketMap.get(ip);
+
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 0, resetAt: now + RATE_LIMIT_WINDOW };
+    bucketMap.set(ip, bucket);
+  }
+
+  bucket.count++;
+  const remaining = Math.max(0, max - bucket.count);
+  return { allowed: bucket.count <= max, remaining, resetAt: bucket.resetAt };
+}
+
+/** Endpoints that involve embedding or heavy computation. */
+const HEAVY_ENDPOINTS = new Set([
+  '/api/knowledge/search',
+  '/api/knowledge/consolidate',
+  '/api/knowledge/reflect',
+  '/api/sessions/search',
+  '/api/sessions/recall',
+]);
+
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -525,6 +584,39 @@ export function startDashboard(port?: number): Promise<http.Server> {
       }
 
       const pathname = url.pathname;
+
+      // Rate limiting for API endpoints
+      if (pathname.startsWith('/api/')) {
+        const ip = getClientIp(req);
+
+        // General rate limit
+        const general = checkRateLimit(rateBuckets, ip, RATE_LIMIT_MAX);
+        if (!general.allowed) {
+          res.writeHead(429, {
+            'Content-Type': 'application/json',
+            'Retry-After': String(Math.ceil((general.resetAt - Date.now()) / 1000)),
+            'X-RateLimit-Limit': String(RATE_LIMIT_MAX),
+            'X-RateLimit-Remaining': '0',
+          });
+          res.end(JSON.stringify({ error: 'Too many requests' }));
+          return;
+        }
+
+        // Stricter limit for heavy endpoints
+        if (HEAVY_ENDPOINTS.has(pathname)) {
+          const heavy = checkRateLimit(rateBucketsHeavy, ip, RATE_LIMIT_MAX_HEAVY);
+          if (!heavy.allowed) {
+            res.writeHead(429, {
+              'Content-Type': 'application/json',
+              'Retry-After': String(Math.ceil((heavy.resetAt - Date.now()) / 1000)),
+              'X-RateLimit-Limit': String(RATE_LIMIT_MAX_HEAVY),
+              'X-RateLimit-Remaining': '0',
+            });
+            res.end(JSON.stringify({ error: 'Too many requests (rate limit for search/analyze)' }));
+            return;
+          }
+        }
+      }
 
       if (pathname.startsWith('/api/') || pathname === '/health') {
         const handled = await handleApi(pathname, url, res);

@@ -30,9 +30,6 @@ src/
     adapters/
       index.ts          SessionAdapter interface, adapter registry, auto-init
       opencode.ts       OpenCode adapter (SQLite database)
-      cline.ts          Cline adapter (VS Code globalStorage JSON)
-      continue.ts       Continue.dev adapter (JSON session files)
-      aider.ts          Aider adapter (Markdown chat history + JSONL LLM history)
   search/
     tfidf.ts            TF-IDF scoring engine (tokenizer, stopwords, index)
     fuzzy.ts            Levenshtein distance, sliding window fuzzy matching
@@ -91,7 +88,7 @@ npm run dev        # watch mode (tsc --watch)
 
 ## Key APIs
 
-- **MCP** (6 tools): `knowledge` (actions: list/read/write/delete/sync), `knowledge_search` (general + scoped recall via `scope` param), `knowledge_session` (actions: list/get/summary), `knowledge_graph` (actions: link/unlink/list/traverse), `knowledge_analyze` (actions: consolidate/reflect), `knowledge_admin` (actions: status/config)
+- **MCP** (6 tools): `knowledge` (actions: list/read/write/delete/sync), `knowledge_search` (general + scoped recall via `scope` param), `knowledge_session` (actions: list/get/summary), `knowledge_graph` (actions: link/unlink/list/traverse), `knowledge_analyze` (actions: consolidate/reflect), `knowledge_admin` (actions: status/config/rebuild_embeddings)
 - **Dashboard**: HTTP + WebSocket at port 3423, REST API for entries/sessions/search
 - **Git sync**: Auto pull/push on write, manual sync via `knowledge(action: 'sync')`
 
@@ -102,9 +99,6 @@ Sessions are auto-discovered from all installed AI coding tools via the adapter 
 - **Claude Code** -- JSONL files in `$KNOWLEDGE_DATA_DIR/projects/`
 - **Cursor** -- JSONL files in `~/.cursor/projects/*/agent-transcripts/`
 - **OpenCode** -- SQLite database at `~/.local/share/opencode/opencode.db` (or `$OPENCODE_DATA_DIR`)
-- **Cline** -- JSON task files in VS Code globalStorage `saoudrizwan.claude-dev/tasks/`
-- **Continue.dev** -- JSON session files in `~/.continue/sessions/`
-- **Aider** -- `.aider.chat.history.md` and `.aider.llm.history` in project directories
 
 Additional roots: `EXTRA_SESSION_ROOTS` env var (comma-separated). New tools: implement `SessionAdapter` in `src/sessions/adapters/`.
 

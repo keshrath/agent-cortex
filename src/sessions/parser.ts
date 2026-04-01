@@ -279,7 +279,7 @@ export function getProjectDirs(): Array<{ name: string; path: string }> {
     }
   }
 
-  // Discover sessions from additional adapters (OpenCode, Cline, Continue.dev, Aider)
+  // Discover sessions from additional adapters (OpenCode)
   for (const adapter of getAvailableAdapters()) {
     try {
       results.push(...adapter.discoverProjects());

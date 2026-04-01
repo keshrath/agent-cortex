@@ -158,15 +158,17 @@ export function createServer(options?: ServerOptions): Server {
       {
         name: 'knowledge_admin',
         description:
-          'Admin operations: view vector store stats or view/update configuration. ' +
-          'Use action "status" for index stats, "config" to view or update settings.',
+          'Admin operations: view vector store stats, view/update configuration, or rebuild embeddings. ' +
+          'Use action "status" for index stats, "config" to view or update settings, ' +
+          '"rebuild_embeddings" to re-embed all knowledge entries (useful when switching providers).',
         inputSchema: {
           type: 'object' as const,
           properties: {
             action: {
               type: 'string',
-              enum: ['status', 'config'],
-              description: 'Action: status (vector store stats), config (view/update settings)',
+              enum: ['status', 'config', 'rebuild_embeddings'],
+              description:
+                'Action: status (vector store stats), config (view/update settings), rebuild_embeddings (re-embed all entries)',
             },
             git_url: {
               type: 'string',

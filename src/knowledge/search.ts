@@ -15,21 +15,39 @@ export interface SearchResult {
   excerpt: string;
 }
 
-/**
- * Search knowledge entries using TF-IDF ranking with regex fallback.
- *
- * Builds a TF-IDF index from all entries, searches by query, and returns
- * ranked results with excerpts. Falls back to regex search if TF-IDF
- * returns no results (useful for exact phrase matches).
- */
-export function searchKnowledge(
-  dir: string,
-  query: string,
-  options: SearchOptions = {},
-): Array<SearchResult> {
-  const { category, maxResults = 10, caseSensitive = false } = options;
+// ── TF-IDF index cache for knowledge entries ──────────────────────────────
 
-  // Gather all entries with their content
+interface KnowledgeIndexCache {
+  index: TfIdfIndex;
+  documents: Array<{ entry: KnowledgeEntry; content: string }>;
+  timestamp: number;
+  /** Cache key: dir + category */
+  cacheKey: string;
+}
+
+let _knowledgeIndexCache: KnowledgeIndexCache | null = null;
+const KNOWLEDGE_INDEX_TTL = 60_000; // 60 seconds, matching session search cache
+
+/** Invalidate the knowledge TF-IDF index cache (call on write/delete). */
+export function invalidateKnowledgeIndexCache(): void {
+  _knowledgeIndexCache = null;
+}
+
+function getOrBuildKnowledgeIndex(
+  dir: string,
+  category?: string,
+): { index: TfIdfIndex; documents: Array<{ entry: KnowledgeEntry; content: string }> } {
+  const cacheKey = `${dir}:${category ?? ''}`;
+  const now = Date.now();
+
+  if (
+    _knowledgeIndexCache &&
+    now - _knowledgeIndexCache.timestamp < KNOWLEDGE_INDEX_TTL &&
+    _knowledgeIndexCache.cacheKey === cacheKey
+  ) {
+    return _knowledgeIndexCache;
+  }
+
   const entries = listEntries(dir, category);
   const documents: Array<{ entry: KnowledgeEntry; content: string }> = [];
 
@@ -42,13 +60,32 @@ export function searchKnowledge(
     }
   }
 
-  if (documents.length === 0) return [];
-
-  // Build TF-IDF index
   const index = new TfIdfIndex();
   for (const doc of documents) {
     index.addDocument(doc.entry.path, doc.content);
   }
+
+  _knowledgeIndexCache = { index, documents, timestamp: now, cacheKey };
+  return { index, documents };
+}
+
+/**
+ * Search knowledge entries using TF-IDF ranking with regex fallback.
+ *
+ * Uses a cached TF-IDF index (60s TTL, invalidated on write/delete) to
+ * avoid rebuilding the index on every search. Falls back to regex search
+ * if TF-IDF returns no results (useful for exact phrase matches).
+ */
+export function searchKnowledge(
+  dir: string,
+  query: string,
+  options: SearchOptions = {},
+): Array<SearchResult> {
+  const { category, maxResults = 10, caseSensitive = false } = options;
+
+  const { index, documents } = getOrBuildKnowledgeIndex(dir, category);
+
+  if (documents.length === 0) return [];
 
   // Search using TF-IDF
   const tfidfResults = index.search(query, maxResults);

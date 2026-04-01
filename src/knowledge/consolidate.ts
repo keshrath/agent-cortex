@@ -34,8 +34,10 @@ export interface ConsolidationReport {
 /**
  * Check for near-duplicate entries after writing.
  *
- * Builds a TF-IDF index from all entries, queries with the new content,
- * and returns entries exceeding the similarity threshold.
+ * Builds a lightweight TF-IDF index from at most 50 recent entries plus the
+ * written entry itself, searches with the new content, and returns entries
+ * exceeding the similarity threshold. Capped at 50 entries to keep duplicate
+ * detection O(1) amortized per write instead of O(n).
  */
 export function checkDuplicates(
   dir: string,
@@ -46,24 +48,34 @@ export function checkDuplicates(
   const entries = listEntries(dir);
   if (entries.length <= 1) return [];
 
-  const documents: Array<{ entry: KnowledgeEntry; content: string }> = [];
+  // Sort by recency so the cap keeps the most relevant entries
+  entries.sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
+
+  const documents: Array<{ path: string; title: string; content: string }> = [];
+  let hasWritten = false;
 
   for (const entry of entries) {
+    if (entry.path === writtenPath) hasWritten = true;
     try {
       const { content } = readEntry(dir, entry.path);
-      documents.push({ entry, content });
-    } catch (err) {
-      console.error('[knowledge] consolidate read:', err instanceof Error ? err.message : err);
+      documents.push({ path: entry.path, title: entry.title, content });
+    } catch {
       continue;
     }
+    if (documents.length >= 50) break;
+  }
+
+  // Ensure the written entry is always included
+  if (!hasWritten) {
+    documents.push({ path: writtenPath, title: writtenPath, content: writtenContent });
   }
 
   if (documents.length <= 1) return [];
 
-  // Build TF-IDF index from all entries
+  // Build TF-IDF index from all collected entries (including written one)
   const index = new TfIdfIndex();
   for (const doc of documents) {
-    index.addDocument(doc.entry.path, doc.content);
+    index.addDocument(doc.path, doc.content);
   }
 
   // Search using the written content as query
@@ -74,10 +86,10 @@ export function checkDuplicates(
     // Skip the entry itself
     if (result.id === writtenPath) continue;
     if (result.score >= threshold) {
-      const doc = documents.find((d) => d.entry.path === result.id);
+      const doc = documents.find((d) => d.path === result.id);
       warnings.push({
         path: result.id,
-        title: doc?.entry.title ?? result.id,
+        title: doc?.title ?? result.id,
         similarity: Math.round(result.score * 100) / 100,
       });
     }

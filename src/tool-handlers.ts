@@ -14,7 +14,7 @@ import { consolidate } from './knowledge/consolidate.js';
 import { reflect } from './knowledge/reflect.js';
 import { indexKnowledgeEntry } from './sessions/indexer.js';
 import { searchSessions } from './sessions/search.js';
-import { searchKnowledge } from './knowledge/search.js';
+import { searchKnowledge, invalidateKnowledgeIndexCache } from './knowledge/search.js';
 import { listSessions, getSessionSummary } from './sessions/summary.js';
 import { scopedSearch, type SearchScope } from './sessions/scopes.js';
 import { VectorStore } from './vectorstore/index.js';
@@ -26,11 +26,47 @@ import {
   getSessionMeta,
 } from './sessions/parser.js';
 import { getConfig, loadPersistedConfig, savePersistedConfig, getConfigLocation } from './types.js';
+import {
+  requireString,
+  optionalString,
+  optionalNumber as _optionalNumber,
+  optionalBoolean as _optionalBoolean,
+  optionalEnum,
+} from './validate.js';
 
 import { CATEGORIES } from './knowledge/store.js';
 const SCOPES = ['errors', 'plans', 'configs', 'tools', 'files', 'decisions', 'all'] as const;
 
 export { SCOPES };
+
+// ── Validation wrappers ─────────────────────────────────────────────────────
+// Thin wrappers to match the call-site signatures used throughout this file.
+
+function optionalNumber(
+  args: Record<string, unknown>,
+  key: string,
+  min?: number,
+  max?: number,
+): number | undefined {
+  return _optionalNumber(args, key, { min, max });
+}
+
+function optionalBoolean(args: Record<string, unknown>, key: string): boolean | undefined {
+  const val = _optionalBoolean(args, key);
+  // validate.ts returns false for undefined; we need undefined here
+  if (args[key] === undefined || args[key] === null) return undefined;
+  return val;
+}
+
+function validateEnum<T extends string>(
+  val: string | undefined,
+  allowed: readonly T[],
+  key: string,
+): T | undefined {
+  if (val === undefined) return undefined;
+  // Use optionalEnum with a synthetic args object
+  return optionalEnum({ [key]: val }, key, allowed) as T | undefined;
+}
 
 // ── Tool result types ────────────────────────────────────────────────────────
 
@@ -64,70 +100,6 @@ export function validateArgs(args: unknown): Record<string, unknown> {
     throw new Error('Invalid tool arguments');
   }
   return args as Record<string, unknown>;
-}
-
-// ── Validation helpers ───────────────────────────────────────────────────────
-
-function requireString(args: Record<string, unknown>, key: string, label?: string): string {
-  const val = args[key];
-  if (val === undefined || val === null || typeof val !== 'string') {
-    throw new Error(`Missing or invalid required parameter: ${label ?? key} (expected string)`);
-  }
-  if (val.length === 0) {
-    throw new Error(`Parameter ${label ?? key} must not be empty`);
-  }
-  return val;
-}
-
-function optionalString(args: Record<string, unknown>, key: string): string | undefined {
-  const val = args[key];
-  if (val === undefined || val === null) return undefined;
-  if (typeof val !== 'string') {
-    throw new Error(`Parameter ${key} must be a string`);
-  }
-  return val;
-}
-
-function optionalNumber(
-  args: Record<string, unknown>,
-  key: string,
-  min?: number,
-  max?: number,
-): number | undefined {
-  const val = args[key];
-  if (val === undefined || val === null) return undefined;
-  const num = typeof val === 'number' ? val : Number(val);
-  if (isNaN(num)) {
-    throw new Error(`Parameter ${key} must be a number`);
-  }
-  if (min !== undefined && num < min) {
-    throw new Error(`Parameter ${key} must be >= ${min}`);
-  }
-  if (max !== undefined && num > max) {
-    throw new Error(`Parameter ${key} must be <= ${max}`);
-  }
-  return num;
-}
-
-function optionalBoolean(args: Record<string, unknown>, key: string): boolean | undefined {
-  const val = args[key];
-  if (val === undefined || val === null) return undefined;
-  if (typeof val === 'boolean') return val;
-  if (val === 'true') return true;
-  if (val === 'false') return false;
-  throw new Error(`Parameter ${key} must be a boolean`);
-}
-
-function validateEnum<T extends string>(
-  val: string | undefined,
-  allowed: readonly T[],
-  key: string,
-): T | undefined {
-  if (val === undefined) return undefined;
-  if (!allowed.includes(val as T)) {
-    throw new Error(`Parameter ${key} must be one of: ${allowed.join(', ')}`);
-  }
-  return val as T;
 }
 
 // ── Handler type ─────────────────────────────────────────────────────────────
@@ -175,6 +147,7 @@ export async function handleKnowledge(args: Record<string, unknown>): Promise<To
       }
       await gitPull(config.memoryDir);
       const filePath = writeEntry(config.memoryDir, category, filename, writeContent);
+      invalidateKnowledgeIndexCache();
       const pushResult = await gitPush(config.memoryDir);
 
       // Index the entry for embeddings
@@ -233,6 +206,7 @@ export async function handleKnowledge(args: Record<string, unknown>): Promise<To
       const entryPath = requireString(a, 'path');
       await gitPull(config.memoryDir);
       const deleted = deleteEntry(config.memoryDir, entryPath);
+      invalidateKnowledgeIndexCache();
       const pushResult = await gitPush(config.memoryDir);
       return ok({ deleted, git: pushResult });
     }
@@ -356,7 +330,7 @@ export async function handleKnowledgeSearch(args: Record<string, unknown>): Prom
   return ok({ sessions: sessionResults, knowledge: knowledgeResults });
 }
 
-export function handleKnowledgeAdmin(args: Record<string, unknown>): ToolResult {
+export async function handleKnowledgeAdmin(args: Record<string, unknown>): Promise<ToolResult> {
   const a = validateArgs(args);
   const action = requireString(a, 'action');
 
@@ -365,6 +339,46 @@ export function handleKnowledgeAdmin(args: Record<string, unknown>): ToolResult 
       const store = new VectorStore();
       const stats = store.stats();
       return ok(stats);
+    }
+    case 'rebuild_embeddings': {
+      const { getEmbeddingProvider } = await import('./embeddings/index.js');
+      const provider = await getEmbeddingProvider();
+      if (!provider) {
+        return err('No embedding provider available');
+      }
+
+      const config = getConfig();
+      const store = new VectorStore();
+
+      // Wipe existing vectors
+      store.wipe();
+      store.connect(provider.dimensions);
+      store.setProvider(provider.name, provider.dimensions);
+
+      // Re-embed all knowledge entries
+      const entries = listEntries(config.memoryDir);
+      let processed = 0;
+      let failed = 0;
+
+      for (const entry of entries) {
+        try {
+          const { content } = readEntry(config.memoryDir, entry.path);
+          await indexKnowledgeEntry(entry.path, content);
+          processed++;
+        } catch (entryErr) {
+          console.error(`[knowledge] rebuild: failed ${entry.path}: ${entryErr}`);
+          failed++;
+        }
+      }
+
+      return ok({
+        message: 'Embedding rebuild complete',
+        provider: provider.name,
+        dimensions: provider.dimensions,
+        processed,
+        failed,
+        total: entries.length,
+      });
     }
     case 'config': {
       const config = getConfig();
@@ -423,7 +437,7 @@ export function handleKnowledgeAdmin(args: Record<string, unknown>): ToolResult 
       });
     }
     default:
-      return err(`Unknown action: ${action}. Valid actions: status, config`);
+      return err(`Unknown action: ${action}. Valid actions: status, config, rebuild_embeddings`);
   }
 }
 
