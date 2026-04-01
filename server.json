@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.keshrath/agent-knowledge",
-  "description": "Cross-session memory and recall for AI agents — git-synced knowledge base, knowledge graph, confidence scoring, hybrid semantic+TF-IDF search",
+  "description": "Cross-session memory for AI agents - knowledge graph, scoring, semantic search",
   "repository": {
     "url": "https://github.com/keshrath/agent-knowledge",
     "source": "github"
   },
-  "version": "1.3.4",
+  "version": "1.3.5",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "agent-knowledge",
-      "version": "1.3.4",
+      "version": "1.3.5",
       "transport": {
         "type": "stdio"
       }
