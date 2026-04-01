@@ -65,6 +65,14 @@ No configuration needed. Additional session roots can be added via the `EXTRA_SE
 
 ## Quick Start
 
+### Install from npm
+
+```bash
+npm install -g agent-knowledge
+```
+
+### Or clone from source
+
 ```bash
 git clone https://github.com/keshrath/agent-knowledge.git
 cd agent-knowledge
@@ -79,19 +87,30 @@ npm install && npm run build
 >
 > Then re-run `npm install`. This is only needed when prebuilt binaries aren't available for your Node.js version (e.g. Node 24+).
 
-### Configure your MCP client
+### Option 1: MCP server (for AI agents)
+
+Add to your MCP client config (Claude Code, Cline, etc.):
+
+```json
+{
+  "mcpServers": {
+    "agent-knowledge": {
+      "command": "npx",
+      "args": ["agent-knowledge"]
+    }
+  }
+}
+```
+
+The dashboard auto-starts at http://localhost:3423 on the first MCP connection.
 
 See [Setup Guide](docs/SETUP.md) for client-specific instructions (Claude Code, Cursor, Windsurf, OpenCode).
 
-Example (Claude Code):
+### Option 2: Standalone server (for REST/WebSocket clients)
 
 ```bash
-claude mcp add agent-knowledge -s user \
-  -e KNOWLEDGE_MEMORY_DIR="$HOME/agent-knowledge" \
-  -- node /path/to/agent-knowledge/dist/index.js
+node dist/server.js --port 3423
 ```
-
-Dashboard: **http://localhost:3423** (auto-starts with MCP server)
 
 ## MCP Tools (6)
 
