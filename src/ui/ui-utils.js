@@ -3,6 +3,8 @@
   'use strict';
 
   window.Knowledge = window.Knowledge || {};
+  window.Knowledge._baseUrl = '';
+  window.Knowledge._wsUrl = null;
 
   // ── DOM helper ──────────────────────────────────────────────────────────────
 
@@ -134,7 +136,7 @@
   // ── API helper ──────────────────────────────────────────────────────────────
 
   async function api(path) {
-    const res = await fetch(`/api${path}`);
+    const res = await fetch(`${window.Knowledge._baseUrl}/api${path}`);
     if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
     return res.json();
   }

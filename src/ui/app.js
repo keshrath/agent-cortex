@@ -101,7 +101,7 @@
 
   function wsConnect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}`);
+    ws = new WebSocket(`${proto}://${K._wsUrl || location.host}`);
 
     ws.addEventListener('open', () => {
       state.connected = true;
@@ -516,14 +516,49 @@
     }, 5000);
   }
 
-  // Start
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
+  // ── Plugin mount / unmount ─────────────────────────────────────────────────
+
+  K.mount = function (container, options) {
+    options = options || {};
+    K._baseUrl = options.baseUrl || '';
+    K._wsUrl = options.wsUrl || null;
+    if (options.cssUrl && !document.getElementById('ak-plugin-css')) {
+      var link = document.createElement('link');
+      link.id = 'ak-plugin-css';
+      link.rel = 'stylesheet';
+      link.href = options.cssUrl;
+      document.head.appendChild(link);
+    }
+    if (typeof K._template === 'function') {
+      container.innerHTML = K._template();
+    }
+    init();
+  };
+
+  K.unmount = function () {
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
+    if (wsRetry) {
+      clearTimeout(wsRetry);
+      wsRetry = null;
+    }
+    state.connected = false;
+    var cssLink = document.getElementById('ak-plugin-css');
+    if (cssLink) cssLink.remove();
+  };
+
+  // Start (standalone mode)
+  if (typeof K._template !== 'function') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        init();
+        K.initPanelResize();
+      });
+    } else {
       init();
       K.initPanelResize();
-    });
-  } else {
-    init();
-    K.initPanelResize();
+    }
   }
 })();
