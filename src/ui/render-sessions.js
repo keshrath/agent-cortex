@@ -50,7 +50,7 @@
   // ── Loading indicator ─────────────────────────────────────────────────────
 
   function showLoadingIndicator(el, show) {
-    let indicator = document.getElementById('sessions-load-more');
+    let indicator = K._root.getElementById('sessions-load-more');
     if (show) {
       if (!indicator) {
         indicator = document.createElement('div');
@@ -69,7 +69,7 @@
   // ── Scroll-based pagination ───────────────────────────────────────────────
 
   function initSessionScroll(state, el) {
-    const content = document.getElementById('content');
+    const content = K._root.getElementById('content');
     if (!content) return;
     content.addEventListener('scroll', () => {
       if (state.sessions.loading || state.sessions.allLoaded) return;

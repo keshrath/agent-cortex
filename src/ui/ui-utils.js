@@ -5,10 +5,11 @@
   window.Knowledge = window.Knowledge || {};
   window.Knowledge._baseUrl = '';
   window.Knowledge._wsUrl = null;
+  window.Knowledge._root = document;
 
   // ── DOM helper ──────────────────────────────────────────────────────────────
 
-  const $ = (id) => document.getElementById(id);
+  const $ = (id) => window.Knowledge._root.getElementById(id);
 
   // ── Escape HTML ─────────────────────────────────────────────────────────────
 

@@ -522,17 +522,44 @@
     options = options || {};
     K._baseUrl = options.baseUrl || '';
     K._wsUrl = options.wsUrl || null;
-    if (options.cssUrl && !document.getElementById('ak-plugin-css')) {
+
+    var shadow = container.attachShadow({ mode: 'open' });
+
+    if (options.cssUrl) {
       var link = document.createElement('link');
-      link.id = 'ak-plugin-css';
       link.rel = 'stylesheet';
       link.href = options.cssUrl;
-      document.head.appendChild(link);
+      shadow.appendChild(link);
     }
+
+    var fonts = document.createElement('link');
+    fonts.rel = 'stylesheet';
+    fonts.href =
+      'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap';
+    shadow.appendChild(fonts);
+    var icons = document.createElement('link');
+    icons.rel = 'stylesheet';
+    icons.href =
+      'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap';
+    shadow.appendChild(icons);
+
+    var pluginStyle = document.createElement('style');
+    pluginStyle.textContent =
+      ':host { display:block; width:100%; height:100%; overflow:hidden; }' +
+      '.ak-wrapper { font-family:var(--font-sans); font-size:14px; color:var(--text); background:var(--bg); line-height:1.5; width:100%; height:100%; overflow:hidden; }' +
+      '.ak-wrapper #app { height:100%; }';
+    shadow.appendChild(pluginStyle);
+
     if (typeof K._template === 'function') {
-      container.innerHTML = K._template();
+      var wrapper = document.createElement('div');
+      wrapper.className = 'theme-dark ak-wrapper';
+      wrapper.innerHTML = K._template();
+      shadow.appendChild(wrapper);
     }
+
+    K._root = shadow;
     init();
+    K.initPanelResize();
   };
 
   K.unmount = function () {
@@ -545,9 +572,12 @@
       wsRetry = null;
     }
     state.connected = false;
-    var cssLink = document.getElementById('ak-plugin-css');
-    if (cssLink) cssLink.remove();
+    K._root = document;
   };
+
+  var _params = new URLSearchParams(location.search);
+  if (_params.get('baseUrl')) K._baseUrl = _params.get('baseUrl');
+  if (_params.get('wsUrl')) K._wsUrl = _params.get('wsUrl');
 
   // Start (standalone mode)
   if (typeof K._template !== 'function') {

@@ -305,7 +305,7 @@
   // ── Panel resize ──────────────────────────────────────────────────────────
 
   function initPanelResize() {
-    const panel = document.getElementById('side-panel');
+    const panel = K._root.getElementById('side-panel');
     if (!panel) return;
     const handle = document.createElement('div');
     handle.className = 'panel-resize-handle';
