@@ -26,54 +26,57 @@
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
   const $ = K.$;
-  const el = {
-    tabs: {
-      knowledge: $('tab-knowledge'),
-      search: $('tab-search'),
-      sessions: $('tab-sessions'),
-      embeddings: $('tab-embeddings'),
-    },
-    views: {
-      knowledge: $('view-knowledge'),
-      search: $('view-search'),
-      sessions: $('view-sessions'),
-      embeddings: $('view-embeddings'),
-    },
-    knowledgeGrid: $('knowledge-grid'),
-    knowledgeEmpty: $('knowledge-empty'),
-    knowledgeCategories: $('knowledge-categories'),
-    knowledgeSearchInput: $('knowledge-search-input'),
-    knowledgeSearchResults: $('knowledge-search-results'),
-    btnConsolidate: $('btn-consolidate'),
-    btnReflect: $('btn-reflect'),
-    searchInput: $('search-input'),
-    searchResults: $('search-results'),
-    searchEmpty: $('search-empty'),
-    searchRoleFilters: $('search-role-filters'),
-    modeRanked: $('mode-ranked'),
-    modeSemantic: $('mode-semantic'),
-    modeRegex: $('mode-regex'),
-    sessionsList: $('sessions-list'),
-    sessionsEmpty: $('sessions-empty'),
-    sessionProjectFilter: $('session-project-filter'),
-    searchScopes: $('search-scopes'),
-    sidePanel: $('side-panel'),
-    panelTitle: $('panel-title'),
-    panelBody: $('panel-body'),
-    panelClose: $('panel-close'),
-    connectionStatus: $('connection-status'),
-    statKnowledge: $('stat-knowledge'),
-    statSessions: $('stat-sessions'),
-    statVectors: $('stat-vectors'),
-    embeddingsStatsGrid: $('embedding-stats-grid'),
-    embeddingsEmpty: $('embeddings-empty'),
-    embeddingsStatus: $('embeddings-status'),
-    themeToggle: $('theme-toggle'),
-    version: $('version'),
-    loadingOverlay: $('loading-overlay'),
-    toastContainer: $('toast-container'),
-    contentWrapper: $('content-wrapper'),
-  };
+  function _buildEl() {
+    return {
+      tabs: {
+        knowledge: $('tab-knowledge'),
+        search: $('tab-search'),
+        sessions: $('tab-sessions'),
+        embeddings: $('tab-embeddings'),
+      },
+      views: {
+        knowledge: $('view-knowledge'),
+        search: $('view-search'),
+        sessions: $('view-sessions'),
+        embeddings: $('view-embeddings'),
+      },
+      knowledgeGrid: $('knowledge-grid'),
+      knowledgeEmpty: $('knowledge-empty'),
+      knowledgeCategories: $('knowledge-categories'),
+      knowledgeSearchInput: $('knowledge-search-input'),
+      knowledgeSearchResults: $('knowledge-search-results'),
+      btnConsolidate: $('btn-consolidate'),
+      btnReflect: $('btn-reflect'),
+      searchInput: $('search-input'),
+      searchResults: $('search-results'),
+      searchEmpty: $('search-empty'),
+      searchRoleFilters: $('search-role-filters'),
+      modeRanked: $('mode-ranked'),
+      modeSemantic: $('mode-semantic'),
+      modeRegex: $('mode-regex'),
+      sessionsList: $('sessions-list'),
+      sessionsEmpty: $('sessions-empty'),
+      sessionProjectFilter: $('session-project-filter'),
+      searchScopes: $('search-scopes'),
+      sidePanel: $('side-panel'),
+      panelTitle: $('panel-title'),
+      panelBody: $('panel-body'),
+      panelClose: $('panel-close'),
+      connectionStatus: $('connection-status'),
+      statKnowledge: $('stat-knowledge'),
+      statSessions: $('stat-sessions'),
+      statVectors: $('stat-vectors'),
+      embeddingsStatsGrid: $('embedding-stats-grid'),
+      embeddingsEmpty: $('embeddings-empty'),
+      embeddingsStatus: $('embeddings-status'),
+      themeToggle: $('theme-toggle'),
+      version: $('version'),
+      loadingOverlay: $('loading-overlay'),
+      toastContainer: $('toast-container'),
+      contentWrapper: $('content-wrapper'),
+    };
+  }
+  let el = _buildEl();
 
   // Expose state and el for module access
   K._state = state;
@@ -485,6 +488,7 @@
   // ── Init ───────────────────────────────────────────────────────────────────
 
   async function init() {
+    el = _buildEl();
     K.initTheme();
     bindEvents();
     K.initSessionScroll(state, el);
@@ -546,13 +550,13 @@
     var pluginStyle = document.createElement('style');
     pluginStyle.textContent =
       ':host { display:block; width:100%; height:100%; overflow:hidden; }' +
-      '.ak-wrapper { font-family:var(--font-sans); font-size:14px; color:var(--text); background:var(--bg); line-height:1.5; width:100%; height:100%; overflow:hidden; }' +
-      '.ak-wrapper #app { height:100%; }';
+      '.ak-wrapper { font-family:var(--font-sans); font-size:14px; color:var(--text); background:var(--bg); line-height:1.5; width:100%; height:100%; overflow:hidden; display:flex; flex-direction:column; }';
     shadow.appendChild(pluginStyle);
 
     if (typeof K._template === 'function') {
       var wrapper = document.createElement('div');
-      wrapper.className = 'theme-dark ak-wrapper';
+      wrapper.className = 'ak-wrapper';
+      wrapper.setAttribute('data-theme', 'dark');
       wrapper.innerHTML = K._template();
       shadow.appendChild(wrapper);
     }
