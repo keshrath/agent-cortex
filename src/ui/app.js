@@ -545,7 +545,13 @@
   // ── Init ───────────────────────────────────────────────────────────────────
 
   async function init() {
-    el = _buildEl();
+    try {
+      el = _buildEl();
+      K._el = el;
+      K._state = state;
+    } catch (err) {
+      console.error('[agent-knowledge] init _buildEl failed:', err);
+    }
     K.initTheme();
     bindEvents();
     K.initSessionScroll(state, el);
@@ -623,6 +629,8 @@
     K._root = shadow;
     init();
     K.initPanelResize();
+    var themeBtn = shadow.getElementById('theme-toggle');
+    if (themeBtn) themeBtn.style.display = 'none';
   };
 
   K.unmount = function () {
