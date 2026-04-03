@@ -14,9 +14,14 @@
   // ── Escape HTML ─────────────────────────────────────────────────────────────
 
   function esc(str) {
+    if (str === null || str === undefined) return '';
     const d = document.createElement('div');
-    d.textContent = str;
+    d.textContent = String(str);
     return d.innerHTML;
+  }
+
+  function escAttr(str) {
+    return esc(str).replace(/"/g, '&quot;');
   }
 
   // ── Debounce ────────────────────────────────────────────────────────────────
@@ -181,11 +186,20 @@
     return tag === 'input' || tag === 'textarea' || tag === 'select' || active.isContentEditable;
   }
 
+  // ── Morphdom wrapper ────────────────────────────────────────────────────────
+
+  function morph(el, newInnerHTML) {
+    var wrap = document.createElement(el.tagName);
+    wrap.innerHTML = newInnerHTML;
+    morphdom(el, wrap, { childrenOnly: true });
+  }
+
   // ── Export ──────────────────────────────────────────────────────────────────
 
   Object.assign(window.Knowledge, {
     $,
     esc,
+    escAttr,
     debounce,
     relativeTime,
     renderMd,
@@ -198,5 +212,6 @@
     toggleTheme,
     stripFrontmatter,
     isInputFocused,
+    morph,
   });
 })();

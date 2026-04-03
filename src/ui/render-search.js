@@ -46,20 +46,22 @@
     const { results, loading, query } = state.search;
 
     if (loading) {
-      el.searchResults.innerHTML =
-        '<div class="loading-inline"><div class="loading-spinner small"></div><span>Searching...</span></div>';
+      K.morph(
+        el.searchResults,
+        '<div class="loading-inline"><div class="loading-spinner small"></div><span>Searching...</span></div>',
+      );
       el.searchEmpty.classList.add('hidden');
       return;
     }
 
     if (!query.trim()) {
-      el.searchResults.innerHTML = '';
+      K.morph(el.searchResults, '');
       el.searchEmpty.classList.remove('hidden');
       return;
     }
 
     if (results.length === 0) {
-      el.searchResults.innerHTML = '';
+      K.morph(el.searchResults, '');
       el.searchEmpty.querySelector('.empty-text').textContent = 'No results found';
       el.searchEmpty.querySelector('.empty-hint').textContent = `No matches for "${query}"`;
       el.searchEmpty.classList.remove('hidden');
@@ -67,18 +69,20 @@
     }
 
     el.searchEmpty.classList.add('hidden');
-    el.searchResults.innerHTML = results
-      .map((r) => {
-        const sessionId = r.id || r.sessionId || r.session_id || '';
-        const excerpt = r.excerpt || r.text || r.content || '';
-        const role = r.role || '';
-        const score = r.score;
-        const meta = r.metadata;
-        const project = r.project || '';
-        const time = K.relativeTime(r.timestamp || r.date);
-        const roleIcon = role === 'user' ? 'person' : role === 'assistant' ? 'smart_toy' : 'chat';
+    K.morph(
+      el.searchResults,
+      results
+        .map((r) => {
+          const sessionId = r.id || r.sessionId || r.session_id || '';
+          const excerpt = r.excerpt || r.text || r.content || '';
+          const role = r.role || '';
+          const score = r.score;
+          const meta = r.metadata;
+          const project = r.project || '';
+          const time = K.relativeTime(r.timestamp || r.date);
+          const roleIcon = role === 'user' ? 'person' : role === 'assistant' ? 'smart_toy' : 'chat';
 
-        return `<div class="result-item" data-session-id="${K.esc(sessionId)}" data-excerpt="${K.esc(excerpt)}" tabindex="0" role="button">
+          return `<div class="result-item" data-session-id="${K.esc(sessionId)}" data-excerpt="${K.esc(excerpt)}" tabindex="0" role="button">
         <div class="result-meta">
           <span class="role-badge" data-role="${K.esc(role)}"><span class="material-symbols-outlined" style="font-size:12px">${roleIcon}</span> ${K.esc(role)}</span>
           ${project ? `<span class="result-project">${K.esc(project)}</span>` : ''}
@@ -87,17 +91,9 @@
         </div>
         <div class="result-excerpt">${K.highlightExcerpt(excerpt, query)}</div>
       </div>`;
-      })
-      .join('');
-
-    el.searchResults.querySelectorAll('.result-item').forEach((card) => {
-      card.addEventListener('click', () =>
-        K.openSessionPanel(card.dataset.sessionId, card.dataset.excerpt),
-      );
-      card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') K.openSessionPanel(card.dataset.sessionId, card.dataset.excerpt);
-      });
-    });
+        })
+        .join(''),
+    );
   }
 
   // ── Export ──────────────────────────────────────────────────────────────────

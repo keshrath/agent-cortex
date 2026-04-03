@@ -320,6 +320,63 @@
       if (state.search.query.trim()) doSearch();
     });
 
+    // ── Delegated click/keydown handlers for morphed containers ──────────
+
+    // Knowledge grid cards
+    el.knowledgeGrid.addEventListener('click', (e) => {
+      const card = e.target.closest('.knowledge-card[data-path]');
+      if (card) K.openKnowledgePanel(card.dataset.path);
+    });
+    el.knowledgeGrid.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const card = e.target.closest('.knowledge-card[data-path]');
+      if (card) K.openKnowledgePanel(card.dataset.path);
+    });
+
+    // Knowledge search results
+    el.knowledgeSearchResults.addEventListener('click', (e) => {
+      const card = e.target.closest('.knowledge-result-item[data-path]');
+      if (card) K.openKnowledgePanel(card.dataset.path);
+    });
+    el.knowledgeSearchResults.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const card = e.target.closest('.knowledge-result-item[data-path]');
+      if (card) K.openKnowledgePanel(card.dataset.path);
+    });
+
+    // Session cards
+    el.sessionsList.addEventListener('click', (e) => {
+      const card = e.target.closest('.session-card[data-session-id]');
+      if (card) K.openSessionPanel(card.dataset.sessionId);
+    });
+    el.sessionsList.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const card = e.target.closest('.session-card[data-session-id]');
+      if (card) K.openSessionPanel(card.dataset.sessionId);
+    });
+
+    // Search results
+    el.searchResults.addEventListener('click', (e) => {
+      const card = e.target.closest('.result-item[data-session-id]');
+      if (card) K.openSessionPanel(card.dataset.sessionId, card.dataset.excerpt);
+    });
+    el.searchResults.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const card = e.target.closest('.result-item[data-session-id]');
+      if (card) K.openSessionPanel(card.dataset.sessionId, card.dataset.excerpt);
+    });
+
+    // Panel body — related entries & knowledge links
+    el.panelBody.addEventListener('click', (e) => {
+      const entry = e.target.closest('.related-entry[data-path]');
+      if (entry) K.openKnowledgePanel(entry.dataset.path);
+    });
+    el.panelBody.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const entry = e.target.closest('.related-entry[data-path]');
+      if (entry) K.openKnowledgePanel(entry.dataset.path);
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       // Escape closes panel

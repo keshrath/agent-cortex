@@ -14,35 +14,37 @@
         : state.knowledge.entries.filter((e) => e.category === cat);
 
     if (filtered.length === 0) {
-      el.knowledgeGrid.innerHTML = '';
+      K.morph(el.knowledgeGrid, '');
       el.knowledgeEmpty.classList.remove('hidden');
       return;
     }
 
     el.knowledgeEmpty.classList.add('hidden');
-    el.knowledgeGrid.innerHTML = filtered
-      .map((entry) => {
-        const cat = entry.category || 'notes';
-        const catIcons = {
-          projects: 'code',
-          people: 'group',
-          decisions: 'gavel',
-          workflows: 'account_tree',
-          notes: 'sticky_note_2',
-        };
-        const icon = catIcons[cat] || 'article';
-        const title = entry.title || entry.path || entry.id || 'Untitled';
-        const tags = (entry.tags || [])
-          .slice(0, 3)
-          .map((t) => `<span class="card-tag">${K.esc(t)}</span>`)
-          .join('');
-        const time = K.relativeTime(entry.updated || entry.created);
+    K.morph(
+      el.knowledgeGrid,
+      filtered
+        .map((entry) => {
+          const cat = entry.category || 'notes';
+          const catIcons = {
+            projects: 'code',
+            people: 'group',
+            decisions: 'gavel',
+            workflows: 'account_tree',
+            notes: 'sticky_note_2',
+          };
+          const icon = catIcons[cat] || 'article';
+          const title = entry.title || entry.path || entry.id || 'Untitled';
+          const tags = (entry.tags || [])
+            .slice(0, 3)
+            .map((t) => `<span class="card-tag">${K.esc(t)}</span>`)
+            .join('');
+          const time = K.relativeTime(entry.updated || entry.created);
 
-        const maturity = entry.maturity || 'candidate';
-        const accessCount = entry.access_count || 0;
-        const hasDuplicates = !!state.knowledge.duplicateClusters[entry.path || ''];
+          const maturity = entry.maturity || 'candidate';
+          const accessCount = entry.access_count || 0;
+          const hasDuplicates = !!state.knowledge.duplicateClusters[entry.path || ''];
 
-        return `<div class="knowledge-card${hasDuplicates ? ' has-duplicates' : ''}" data-path="${K.esc(entry.path || entry.id || '')}" tabindex="0" role="button">
+          return `<div class="knowledge-card${hasDuplicates ? ' has-duplicates' : ''}" data-path="${K.esc(entry.path || entry.id || '')}" tabindex="0" role="button">
         <div class="card-header-row">
           <span class="card-category" data-cat="${K.esc(cat)}">
             <span class="material-symbols-outlined" style="font-size:14px">${icon}</span>
@@ -57,15 +59,9 @@
         <div class="card-title">${K.esc(title)}</div>
         ${tags ? `<div class="card-tags">${tags}</div>` : ''}
       </div>`;
-      })
-      .join('');
-
-    el.knowledgeGrid.querySelectorAll('.knowledge-card').forEach((card) => {
-      card.addEventListener('click', () => K.openKnowledgePanel(card.dataset.path));
-      card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') K.openKnowledgePanel(card.dataset.path);
-      });
-    });
+        })
+        .join(''),
+    );
   }
 
   // ── Knowledge search ──────────────────────────────────────────────────────
@@ -106,28 +102,30 @@
     el.knowledgeEmpty.classList.add('hidden');
     el.knowledgeGrid.style.display = 'none';
     el.knowledgeSearchResults.style.display = '';
-    el.knowledgeSearchResults.innerHTML = results
-      .map((r) => {
-        const title = r.title || r.path || '';
-        const excerpt = r.excerpt || '';
-        const score = r.score;
-        const maturity = r.maturity || 'candidate';
-        const accessCount = r.access_count || 0;
-        const decayF = r.decay_factor;
-        const matMult = r.maturity_multiplier;
-        const path = r.path || '';
+    K.morph(
+      el.knowledgeSearchResults,
+      results
+        .map((r) => {
+          const title = r.title || r.path || '';
+          const excerpt = r.excerpt || '';
+          const score = r.score;
+          const maturity = r.maturity || 'candidate';
+          const accessCount = r.access_count || 0;
+          const decayF = r.decay_factor;
+          const matMult = r.maturity_multiplier;
+          const path = r.path || '';
 
-        let scoreBreakdown = '';
-        if (score != null) {
-          const parts = [];
-          parts.push(`relevance: ${score.toFixed(2)}`);
-          if (decayF != null) parts.push(`decay: ${decayF.toFixed(2)}`);
-          if (matMult != null) parts.push(`maturity: x${matMult.toFixed(1)}`);
-          const finalScore = score * (decayF || 1) * (matMult || 1);
-          scoreBreakdown = `<div class="score-breakdown">Score: ${finalScore.toFixed(2)} (${parts.join(' \u00d7 ')})</div>`;
-        }
+          let scoreBreakdown = '';
+          if (score != null) {
+            const parts = [];
+            parts.push(`relevance: ${score.toFixed(2)}`);
+            if (decayF != null) parts.push(`decay: ${decayF.toFixed(2)}`);
+            if (matMult != null) parts.push(`maturity: x${matMult.toFixed(1)}`);
+            const finalScore = score * (decayF || 1) * (matMult || 1);
+            scoreBreakdown = `<div class="score-breakdown">Score: ${finalScore.toFixed(2)} (${parts.join(' \u00d7 ')})</div>`;
+          }
 
-        return `<div class="result-item knowledge-result-item" data-path="${K.esc(path)}" tabindex="0" role="button">
+          return `<div class="result-item knowledge-result-item" data-path="${K.esc(path)}" tabindex="0" role="button">
           <div class="result-meta">
             <span class="maturity-badge" data-maturity="${K.esc(maturity)}">${K.esc(maturity)}${accessCount > 0 ? ` <span class="maturity-reads">&middot; ${accessCount} reads</span>` : ''}</span>
             <span class="result-entry-title">${K.esc(title)}</span>
@@ -136,15 +134,9 @@
           <div class="result-excerpt">${K.highlightExcerpt(excerpt, query)}</div>
           ${scoreBreakdown}
         </div>`;
-      })
-      .join('');
-
-    el.knowledgeSearchResults.querySelectorAll('.knowledge-result-item').forEach((card) => {
-      card.addEventListener('click', () => K.openKnowledgePanel(card.dataset.path));
-      card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') K.openKnowledgePanel(card.dataset.path);
-      });
-    });
+        })
+        .join(''),
+    );
   }
 
   // ── Load knowledge from API ───────────────────────────────────────────────

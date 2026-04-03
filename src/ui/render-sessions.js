@@ -84,9 +84,11 @@
     const projects = [...new Set(sessions.map((s) => s.project).filter(Boolean))].sort();
     const sel = el.sessionProjectFilter;
     const current = sel.value;
-    sel.innerHTML =
+    K.morph(
+      sel,
       '<option value="">All projects</option>' +
-      projects.map((p) => `<option value="${K.esc(p)}">${K.esc(p)}</option>`).join('');
+        projects.map((p) => `<option value="${K.esc(p)}">${K.esc(p)}</option>`).join(''),
+    );
     sel.value = current;
   }
 
@@ -99,36 +101,38 @@
       : state.sessions.list;
 
     if (list.length === 0) {
-      el.sessionsList.innerHTML = '';
+      K.morph(el.sessionsList, '');
       el.sessionsEmpty.classList.remove('hidden');
       return;
     }
 
     el.sessionsEmpty.classList.add('hidden');
-    el.sessionsList.innerHTML = list
-      .map((s) => {
-        const id = s.sessionId || s.id || '';
-        const project = s.project || '';
-        const branch = s.branch || s.gitBranch || s.git_branch || '';
-        const count = s.messageCount || s.message_count || s.count || 0;
-        const date = s.startTime || s.date || s.created || s.startedAt || '';
-        const preview = s.preview || '';
-        const time = K.relativeTime(date);
-        const dateStr = date
-          ? new Date(date).toLocaleDateString(undefined, {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })
-          : '';
+    K.morph(
+      el.sessionsList,
+      list
+        .map((s) => {
+          const id = s.sessionId || s.id || '';
+          const project = s.project || '';
+          const branch = s.branch || s.gitBranch || s.git_branch || '';
+          const count = s.messageCount || s.message_count || s.count || 0;
+          const date = s.startTime || s.date || s.created || s.startedAt || '';
+          const preview = s.preview || '';
+          const time = K.relativeTime(date);
+          const dateStr = date
+            ? new Date(date).toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : '';
 
-        const title = preview
-          ? preview.length > 80
-            ? preview.slice(0, 80) + '\u2026'
-            : preview
-          : id.slice(0, 8);
+          const title = preview
+            ? preview.length > 80
+              ? preview.slice(0, 80) + '\u2026'
+              : preview
+            : id.slice(0, 8);
 
-        return `<div class="session-card" data-session-id="${K.esc(id)}" tabindex="0" role="button">
+          return `<div class="session-card" data-session-id="${K.esc(id)}" tabindex="0" role="button">
         <div class="session-header">
           <span class="session-title">${K.esc(title)}</span>
           <span class="session-date">${dateStr || time || ''}</span>
@@ -140,15 +144,9 @@
           <span class="session-meta-item"><span class="material-symbols-outlined">tag</span>${K.esc(id.slice(0, 8))}</span>
         </div>
       </div>`;
-      })
-      .join('');
-
-    el.sessionsList.querySelectorAll('.session-card').forEach((card) => {
-      card.addEventListener('click', () => K.openSessionPanel(card.dataset.sessionId));
-      card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') K.openSessionPanel(card.dataset.sessionId);
-      });
-    });
+        })
+        .join(''),
+    );
   }
 
   // ── Open session in side panel ────────────────────────────────────────────
@@ -185,7 +183,7 @@
   function renderEmbeddingStats(state, el) {
     const stats = state.embeddings.stats;
     if (!stats || !stats.totalEntries) {
-      el.embeddingsStatsGrid.innerHTML = '';
+      K.morph(el.embeddingsStatsGrid, '');
       el.embeddingsStatus.style.display = 'none';
       el.embeddingsEmpty.classList.remove('hidden');
       return;
@@ -207,17 +205,20 @@
       { label: 'DB Size', value: (stats.dbSizeMB || 0).toFixed(1) + ' MB', detail: 'on disk' },
     ];
 
-    el.embeddingsStatsGrid.innerHTML = cards
-      .map(
-        (c) => `
+    K.morph(
+      el.embeddingsStatsGrid,
+      cards
+        .map(
+          (c) => `
       <div class="embedding-stat-card">
         <span class="stat-label">${K.esc(c.label)}</span>
         <span class="stat-number">${K.esc(String(c.value))}</span>
         ${c.detail ? `<span class="stat-detail">${K.esc(c.detail)}</span>` : ''}
       </div>
     `,
-      )
-      .join('');
+        )
+        .join(''),
+    );
   }
 
   // ── Export ──────────────────────────────────────────────────────────────────

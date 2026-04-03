@@ -9,10 +9,11 @@
   function openPanel(type, data) {
     const state = K._state;
     const el = K._el;
+    if (!el || !el.sidePanel) return;
     state.panel = { open: true, type, data };
     el.sidePanel.hidden = false;
     requestAnimationFrame(() => el.sidePanel.classList.add('open'));
-    el.contentWrapper.classList.add('panel-visible');
+    if (el.contentWrapper) el.contentWrapper.classList.add('panel-visible');
 
     if (type === 'knowledge') {
       renderKnowledgePanel(data, el);
@@ -49,7 +50,10 @@
   // ── Knowledge panel ───────────────────────────────────────────────────────
 
   function renderKnowledgePanel(data, el) {
-    el.panelTitle.innerHTML = `<span class="material-symbols-outlined panel-icon">article</span>${K.esc(data.title)}`;
+    K.morph(
+      el.panelTitle,
+      `<span class="material-symbols-outlined panel-icon">article</span>${K.esc(data.title)}`,
+    );
     const meta = data.meta || {};
     const entry = meta.entry || meta;
     const category = entry.category || meta.category || '';
@@ -92,15 +96,7 @@
       html += '</div></div>';
     }
 
-    el.panelBody.innerHTML = html;
-
-    // Bind click handlers on related entries
-    el.panelBody.querySelectorAll('.related-entry').forEach((entryEl) => {
-      entryEl.addEventListener('click', () => K.openKnowledgePanel(entryEl.dataset.path));
-      entryEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') K.openKnowledgePanel(entryEl.dataset.path);
-      });
-    });
+    K.morph(el.panelBody, html);
   }
 
   // ── Session panel ─────────────────────────────────────────────────────────
@@ -111,7 +107,10 @@
     const id = data.sessionId || s.id || '';
     const meta = s.meta || s;
 
-    el.panelTitle.innerHTML = `<span class="material-symbols-outlined panel-icon">terminal</span>Session ${K.esc(id.slice(0, 8))}`;
+    K.morph(
+      el.panelTitle,
+      `<span class="material-symbols-outlined panel-icon">terminal</span>Session ${K.esc(id.slice(0, 8))}`,
+    );
 
     let html = '<div class="panel-meta">';
     if (meta.cwd)
@@ -167,7 +166,7 @@
         '<div class="empty-state"><span class="material-symbols-outlined empty-icon">chat_bubble</span><div class="empty-text">No messages available</div></div>';
     }
 
-    el.panelBody.innerHTML = html;
+    K.morph(el.panelBody, html);
 
     // Scroll to and highlight matching message from search
     if (data.searchExcerpt) {
@@ -212,8 +211,10 @@
   // ── Consolidate panel ─────────────────────────────────────────────────────
 
   function renderConsolidatePanel(data, el) {
-    el.panelTitle.innerHTML =
-      '<span class="material-symbols-outlined panel-icon">content_copy</span>Duplicate Analysis';
+    K.morph(
+      el.panelTitle,
+      '<span class="material-symbols-outlined panel-icon">content_copy</span>Duplicate Analysis',
+    );
 
     let html = '<div class="panel-meta">';
     html += `<span class="panel-meta-item">${data.totalEntries} entries scanned</span>`;
@@ -251,18 +252,16 @@
       }
     }
 
-    el.panelBody.innerHTML = html;
-
-    el.panelBody.querySelectorAll('.related-entry').forEach((entryEl) => {
-      entryEl.addEventListener('click', () => K.openKnowledgePanel(entryEl.dataset.path));
-    });
+    K.morph(el.panelBody, html);
   }
 
   // ── Reflect panel ─────────────────────────────────────────────────────────
 
   function renderReflectPanel(data, el) {
-    el.panelTitle.innerHTML =
-      '<span class="material-symbols-outlined panel-icon">psychology</span>Reflection Analysis';
+    K.morph(
+      el.panelTitle,
+      '<span class="material-symbols-outlined panel-icon">psychology</span>Reflection Analysis',
+    );
 
     let html = '<div class="panel-meta">';
     html += `<span class="panel-meta-item">${data.totalEntries} total entries</span>`;
@@ -296,11 +295,7 @@
       html += '</div>';
     }
 
-    el.panelBody.innerHTML = html;
-
-    el.panelBody.querySelectorAll('.related-entry').forEach((entryEl) => {
-      entryEl.addEventListener('click', () => K.openKnowledgePanel(entryEl.dataset.path));
-    });
+    K.morph(el.panelBody, html);
   }
 
   // ── Panel resize ──────────────────────────────────────────────────────────
