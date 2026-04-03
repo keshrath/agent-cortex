@@ -28,9 +28,10 @@
   function closePanel() {
     const state = K._state;
     const el = K._el;
+    if (!el || !el.sidePanel) return;
     state.panel = { open: false, type: null, data: null };
     el.sidePanel.classList.remove('open');
-    el.contentWrapper.classList.remove('panel-visible');
+    if (el.contentWrapper) el.contentWrapper.classList.remove('panel-visible');
     el.sidePanel.addEventListener(
       'transitionend',
       function handler() {

@@ -127,10 +127,13 @@
     t.innerHTML = `<span class="material-symbols-outlined toast-icon">${icons[type] || 'info'}</span>
       <span class="toast-msg">${esc(msg)}</span>`;
     container.appendChild(t);
-    requestAnimationFrame(() => t.classList.add('show'));
     setTimeout(() => {
-      t.classList.remove('show');
-      t.addEventListener('transitionend', () => t.remove());
+      t.classList.add('fade-out');
+      t.addEventListener('animationend', () => t.remove());
+      // Fallback removal if animationend doesn't fire
+      setTimeout(() => {
+        if (t.parentNode) t.remove();
+      }, 500);
     }, duration);
   }
 

@@ -210,7 +210,7 @@
   function switchTab(name, updateHash = true) {
     if (state.activeTab === name) return;
     state.activeTab = name;
-    if (updateHash) location.hash = '#' + name;
+    if (updateHash && K._root === document) location.hash = '#' + name;
 
     Object.keys(el.tabs).forEach((k) => {
       const active = k === name;
@@ -494,18 +494,20 @@
     K.initSessionScroll(state, el);
     wsConnect();
 
-    // Restore tab from URL hash
-    const hash = location.hash.replace('#', '');
-    const validTabs = Object.keys(el.tabs);
-    if (hash && validTabs.includes(hash)) {
-      switchTab(hash, false);
-    }
+    // Restore tab from URL hash (standalone mode only)
+    if (K._root === document) {
+      const hash = location.hash.replace('#', '');
+      const validTabs = Object.keys(el.tabs);
+      if (hash && validTabs.includes(hash)) {
+        switchTab(hash, false);
+      }
 
-    // Listen for back/forward navigation
-    window.addEventListener('hashchange', () => {
-      const h = location.hash.replace('#', '');
-      if (h && validTabs.includes(h)) switchTab(h, false);
-    });
+      // Listen for back/forward navigation
+      window.addEventListener('hashchange', () => {
+        const h = location.hash.replace('#', '');
+        if (h && validTabs.includes(h)) switchTab(h, false);
+      });
+    }
 
     // Load initial data in parallel
     try {
@@ -517,7 +519,7 @@
     // Hide loading overlay after a short delay if ws hasn't connected
     setTimeout(() => {
       el.loadingOverlay.classList.add('hidden');
-    }, 5000);
+    }, 2000);
   }
 
   // ── Plugin mount / unmount ─────────────────────────────────────────────────
